@@ -129,6 +129,7 @@ MelonHub/
 | --- | --- |
 | 修改前端页面 | 本机项目启动后由 Vite 自动更新，必要时刷新浏览器 |
 | 修改后端 Java 代码 | 先测试，再执行 `./scripts/deploy-backend.ps1` 构建并更新服务器；仅重启本机项目不会部署新代码 |
+| 仅修改 `backend/src/test/` 或文档 | 本机运行相应测试并更新报告、提交文档；测试源码不进入服务器运行包，无需重新部署后端 |
 | 修改本机 `.env` | 先执行 `./scripts/stop-all.ps1`，再启动；更改服务器运行配置还需重新部署 |
 | 查看服务器后端状态 | `./scripts/server-backend.ps1 status` |
 | 重启服务器后端 | `./scripts/server-backend.ps1 restart` |
@@ -163,6 +164,8 @@ Invoke-RestMethod http://127.0.0.1:8080/api/health
 本次证据与未验证范围见 [验证记录](docs/验证记录.md)。历史本地容器、压测数字不能作为本次云端与服务器 Redis 的验收结果。
 
 覆盖率入口执行 clean verify，重新运行后端测试并生成 `backend/target/site/jacoco/index.html`（HTML）及同目录 `jacoco.xml`、`jacoco.csv`。当前 JaCoCo 0.8.12，覆盖率运行使用 JDK 21（可先设置 `$env:JAVA_HOME`）；Redis 关闭时相关用例跳过，需结合测试统计阅读覆盖率。
+
+`ControllerIntegrationTest` 经真实认证过滤器调用管理、业务和治理接口，验证成功响应、参数错误、跨软件越权及写入后的授权变化；详细测试范围与最新分包覆盖率见 [JaCoCo 测试指南](docs/JaCoCo测试指南.md)。
 
 ## 关键约定
 
