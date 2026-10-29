@@ -4,6 +4,14 @@
 
 2026-10-20 模型更新：约束为 **角色 × 软件**，部门只管理成员及批量授权。结构见 [数据库设计](数据库设计.md)。
 
+## 文档格式与接口平台导入
+
+- `API.md` 是便于仓库阅读和维护的接口说明；`API.adoc` 是按交付要求生成的 AsciiDoc 版本。
+- `openapi.json` 是可导入 Apifox、Postman 等接口管理平台的 OpenAPI 3.0 文件，当前覆盖 85 个路径、115 个操作及 3 种认证方案。
+- 2026-10-29 已导入 Apifox 个人团队项目 `MelonHub RBAC0 API`，采用“以 OpenAPI 文件维护接口”；项目保持非公开，团队成员登录后可在 Apifox 中查看。
+- 修改本文件后，在项目根目录运行 `node scripts/convert-docs-to-adoc.mjs` 同步 AsciiDoc；Controller 或请求 DTO 变化后运行 `node scripts/generate-openapi.mjs` 更新平台导入文件。
+- OpenAPI 文件由当前 Spring Controller 和 `Requests.java` 生成，请求模型已结构化；部分响应仍使用通用对象描述，字段语义以本文和实际接口响应为准。
+
 ## 1. 地址与认证
 
 | 入口 | 前缀 | 认证方式 | 调用方 |

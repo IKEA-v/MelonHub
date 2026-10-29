@@ -92,13 +92,14 @@ MelonHub/
 - [服务器部署与启动](docs/服务器部署与启动.md)：已部署后端、本机启动、更新和服务器管理。
 - [JaCoCo 测试指南](docs/JaCoCo测试指南.md)：完整命令、报告查看和跳过项说明。
 - [项目讲解与数据链路](docs/项目讲解与数据链路.md)：从请求、对象映射到页面更新，含设计理由和答辩问答。
-- [详细设计](docs/详细设计.md)：需求追踪、逐类职责、前端与 SDK、事务并发及设计边界。
-- [数据库设计](docs/数据库设计.md)：当前关系、唯一键和复合外键、V7 共享权限迁移。
+- 详细设计：[Markdown](docs/详细设计.md) / [AsciiDoc](docs/详细设计.adoc)，包含需求追踪、逐类职责、前端与 SDK、事务并发及设计边界。
+- 数据库设计：[Markdown](docs/数据库设计.md) / [AsciiDoc](docs/数据库设计.adoc)，包含当前关系、唯一键和复合外键、V7 共享权限迁移。
 - [数据库 E-R 图](docs/数据库E-R图.md)：按当前数据库结构绘制的全表图、模块分图、主外键与可重建源文件。
 - [当前设计图](docs/UML/README.md)：V7 类图、数据流图、通信图及重建入口。
 - [使用说明书](docs/使用说明书.md)：可照做的功能演示、配套数据、部门授权、审批复核及重演恢复。
 - [云数据库运行](docs/云数据库运行.md)：配置、启停、IDEA 和测试。
-- [接口说明](docs/API.md)、[架构说明](docs/ARCHITECTURE.md)。
+- 接口说明：[Markdown](docs/API.md) / [AsciiDoc](docs/API.adoc)；[OpenAPI 3.0 导入文件](docs/openapi.json)可用于 Apifox 等接口管理平台。
+- [架构说明](docs/ARCHITECTURE.md)。
 - [验证记录](docs/验证记录.md)、[Java SDK](sdk/java/README.md)。
 
 ## 快速使用
