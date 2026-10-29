@@ -6,6 +6,8 @@ target/
 !.env.example
 .local/
 output/
+.codeartsdoer/
+tmp/pdfs/
 *.log
 .idea/
 .vscode/
