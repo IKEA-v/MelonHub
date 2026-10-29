@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const documents = ['数据库设计', '详细设计', 'API']
+const documents = ['数据库设计', '详细设计', 'API', '数据库E-R图', '数据库E-R图-陈氏']
 
 function inline(text) {
   return text

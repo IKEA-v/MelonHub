@@ -1,0 +1,38 @@
+graph Chen {
+graph [layout=neato, overlap=true, splines=line, outputorder=edgesfirst, bgcolor="white", pad="0.5", fontname="Arial", fontsize=22, labelloc=t, labeljust=l];
+node [fontname="Arial", fontsize=15, pin=true, penwidth=1.5, color="#263e48"];
+edge [fontname="Arial", fontsize=15, color="#50616a", penwidth=1.2, labeldistance=1.8, labelangle=25];
+label=<<TABLE BORDER="0" CELLBORDER="0" CELLPADDING="3"><TR><TD ALIGN="LEFT"><FONT POINT-SIZE="22">MelonHub / 陈氏 E-R 图 / 02  权限上下文与激活角色</FONT></TD></TR><TR><TD ALIGN="LEFT"><FONT POINT-SIZE="14">V7 软件级 RBAC0 | 2026-10-29</FONT></TD></TR><TR><TD ALIGN="LEFT"><FONT POINT-SIZE="14">矩形：实体　菱形：联系　椭圆：属性　下划线：主键</FONT></TD></TR><TR><TD ALIGN="LEFT"><FONT POINT-SIZE="14">1 / M / N：最大基数　单线：可选参与　双线：必须参与</FONT></TD></TR><TR><TD ALIGN="LEFT"><FONT POINT-SIZE="14">关键属性节选；完整字段和外键见原表结构图。</FONT></TD></TR></TABLE>>;
+users [pos="0,3!", shape=box, style=filled, fillcolor="#e9f3f5", width=2.3, height=0.8, label=<<B>业务用户</B><BR/><FONT POINT-SIZE="11">users</FONT>>];
+permission_contexts [pos="6,3!", shape=box, style=filled, fillcolor="#e9f3f5", width=2.3, height=0.8, label=<<B>权限上下文</B><BR/><FONT POINT-SIZE="11">permission_contexts</FONT>>];
+roles [pos="12,3!", shape=box, style=filled, fillcolor="#e9f3f5", width=2.3, height=0.8, label=<<B>软件角色</B><BR/><FONT POINT-SIZE="11">roles</FONT>>];
+applications [pos="6,-3!", shape=box, style=filled, fillcolor="#e9f3f5", width=2.3, height=0.8, label=<<B>业务软件</B><BR/><FONT POINT-SIZE="11">applications</FONT>>];
+users__id [pos="-0.975,5.5!", shape=ellipse, width=1.8, height=0.68, fontsize=12, label=<<U>用户编号<BR/><FONT POINT-SIZE="10">id</FONT></U>>];
+users__external_id [pos="0.975,5.5!", shape=ellipse, width=1.8, height=0.68, fontsize=12, label=<外部用户标识<BR/><FONT POINT-SIZE="10">external_id</FONT>>];
+permission_contexts__id [pos="5.025,5.5!", shape=ellipse, width=1.8, height=0.68, fontsize=12, label=<<U>上下文标识（哈希）<BR/><FONT POINT-SIZE="10">id</FONT></U>>];
+permission_contexts__expires_at [pos="6.975,5.5!", shape=ellipse, width=1.8, height=0.68, fontsize=12, label=<到期时间<BR/><FONT POINT-SIZE="10">expires_at</FONT>>];
+roles__id [pos="11.025,5.5!", shape=ellipse, width=1.8, height=0.68, fontsize=12, label=<<U>角色编号<BR/><FONT POINT-SIZE="10">id</FONT></U>>];
+roles__code [pos="12.975,5.5!", shape=ellipse, width=1.8, height=0.68, fontsize=12, label=<角色编码<BR/><FONT POINT-SIZE="10">code</FONT>>];
+applications__id [pos="5.025,-5.3!", shape=ellipse, width=1.8, height=0.68, fontsize=12, label=<<U>软件编号<BR/><FONT POINT-SIZE="10">id</FONT></U>>];
+applications__code [pos="6.975,-5.3!", shape=ellipse, width=1.8, height=0.68, fontsize=12, label=<软件编码<BR/><FONT POINT-SIZE="10">code</FONT>>];
+create_context [pos="3,3!", shape=diamond, style=filled, fillcolor="#fff3dc", width=1.8, height=1, label="持有"];
+activate [pos="9,3!", shape=diamond, style=filled, fillcolor="#fff3dc", width=1.8, height=1, label="激活"];
+scope_context [pos="6,0!", shape=diamond, style=filled, fillcolor="#fff3dc", width=1.8, height=1, label="限定软件"];
+own_role [pos="12,-3!", shape=diamond, style=filled, fillcolor="#fff3dc", width=1.8, height=1, label="拥有角色"];
+users -- users__id [];
+users -- users__external_id [];
+permission_contexts -- permission_contexts__id [];
+permission_contexts -- permission_contexts__expires_at [];
+roles -- roles__id [];
+roles -- roles__code [];
+applications -- applications__id [];
+applications -- applications__code [];
+create_context -- users [headlabel="1"];
+create_context -- permission_contexts [headlabel="N", color="#50616a:#ffffff:#50616a"];
+activate -- permission_contexts [headlabel="M"];
+activate -- roles [headlabel="N"];
+scope_context -- applications [headlabel="1"];
+scope_context -- permission_contexts [headlabel="N", color="#50616a:#ffffff:#50616a"];
+own_role -- applications [headlabel="1"];
+own_role -- roles [headlabel="N", color="#50616a:#ffffff:#50616a"];
+}
