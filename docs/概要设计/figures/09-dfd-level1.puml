@@ -1,0 +1,90 @@
+@startdot
+digraph DFD1 {
+  graph [rankdir=LR, bgcolor="white", pad=0.35, nodesep=0.32, ranksep=1.2, dpi=72, label="图 4-4 系统第一层数据流图（同号外部实体及存储允许重复）", labelloc=t, fontname="Microsoft YaHei", fontsize=18];
+  node [fontname="Microsoft YaHei", fontsize=13, color="#374151", margin=0.12];
+  edge [fontname="Microsoft YaHei", fontsize=11, color="#374151", arrowsize=0.7];
+  subgraph cluster_1 {
+    label="P1 身份与会话"; sortv=1; color="#c2c8cc"; fontname="Microsoft YaHei";
+    E1a [shape=box, width=2.9, label="E1 管理控制台 / 管理员"];
+    P1 [shape=circle, label="P1 身份会话\nM02"];
+    D1a [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D1 账户 / 软件 / 组织配置</TD></TR></TABLE>>];
+    D3a [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D3 上下文 / 会话</TD></TR></TABLE>>];
+    D4a [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D4 治理 / 审计 / 外盒</TD></TR></TABLE>>];
+    E1a -> P1 [label="F01 登录及账号安全请求"];
+    P1 -> E1a [label="F02 身份结果与会话状态", constraint=false];
+    P1 -> D1a [label="账号安全变更与当前状态", dir=both];
+    P1 -> D3a [label="会话写入/读取", dir=both];
+    P1 -> D4a [label="认证审计"];
+  }
+  subgraph cluster_2 {
+    label="P2 管理配置与分配"; sortv=2; color="#c2c8cc"; fontname="Microsoft YaHei";
+    E1b [shape=box, width=3.4, label="E1 管理控制台 / 管理员（重复）"];
+    P2 [shape=circle, label="P2 管理配置\nM03/M04/M05\n数据访问 M10"];
+    D1b [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D1 账户 / 软件 / 组织配置</TD></TR></TABLE>>];
+    D2b [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D2 角色权限 / 分配</TD></TR></TABLE>>];
+    D3b [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D3 上下文 / 会话</TD></TR></TABLE>>];
+    D4b [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D4 治理 / 审计 / 外盒</TD></TR></TABLE>>];
+    D5b [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D5 可选可重建缓存</TD></TR></TABLE>>];
+    E1b -> P2 [label="F03 组织/软件/角色/\n分配配置"];
+    P2 -> E1b [label="F04 配置查询与保存结果", constraint=false];
+    P2 -> D1b [label="配置写入/读取", dir=both];
+    P2 -> D2b [label="角色权限/分配变更与当前值", dir=both];
+    P2 -> D3b [label="受影响上下文"];
+    P2 -> D4b [label="必要审计与外盒"];
+    P2 -> D5b [label="代失效 / M11"];
+  }
+  subgraph cluster_3 {
+    label="P3 软件级业务接口"; sortv=3; color="#c2c8cc"; fontname="Microsoft YaHei";
+    E2a [shape=box, width=3.1, label="E2 可信业务后端 / SDK"];
+    P3 [shape=circle, label="P3 业务 API\nM04/M05/M06/M07\n经 M02，访问 M10"];
+    D1c [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D1 账户 / 软件 / 组织配置</TD></TR></TABLE>>];
+    D2c [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D2 角色权限 / 分配</TD></TR></TABLE>>];
+    D3c [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D3 上下文 / 会话</TD></TR></TABLE>>];
+    D4c [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D4 治理 / 审计 / 外盒</TD></TR></TABLE>>];
+    D5c [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D5 可选可重建缓存</TD></TR></TABLE>>];
+    E2a -> P3 [label="F07 软件级配置/申请/\n上下文/校验请求"];
+    P3 -> E2a [label="F08 软件级配置/申请/\n上下文/判断结果", constraint=false];
+    P3 -> D1c [label="软件/用户事实", dir=back];
+    P3 -> D2c [label="授权配置与当前有效集", dir=both];
+    P3 -> D3c [label="上下文写入/读取", dir=both];
+    P3 -> D4c [label="申请/必要审计/外盒"];
+    P3 -> D5c [label="代/结果与失效 / M11", dir=both];
+  }
+  subgraph cluster_4 {
+    label="P4 后台维护"; sortv=4; color="#c2c8cc"; fontname="Microsoft YaHei";
+    P4 [shape=circle, label="P4 到期/封存/清理\nM09/M13\n数据访问 M10"];
+    D2d [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D2 角色权限 / 分配</TD></TR></TABLE>>];
+    D3d [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D3 上下文 / 会话</TD></TR></TABLE>>];
+    D4d [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D4 治理 / 审计 / 外盒</TD></TR></TABLE>>];
+    D5d [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D5 可选可重建缓存</TD></TR></TABLE>>];
+    P4 -> D2d [label="到期分配与清理结果", dir=both];
+    P4 -> D3d [label="过期上下文/会话与清理结果", dir=both];
+    P4 -> D4d [label="待封存/保留记录、审计与到期外盒", dir=both];
+    P4 -> D5d [label="到期代失效 / M11"];
+  }
+  subgraph cluster_5 {
+    label="P5 治理、审计与状态"; sortv=5; color="#c2c8cc"; fontname="Microsoft YaHei";
+    E1c [shape=box, width=3.4, label="E1 管理控制台 / 管理员（重复）"];
+    P5 [shape=circle, label="P5 治理/审计/状态\nM07/M09/M13\n经 M02，访问 M10"];
+    D1e [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D1 账户 / 软件 / 组织配置</TD></TR></TABLE>>];
+    D2e [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D2 角色权限 / 分配</TD></TR></TABLE>>];
+    D3e [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D3 上下文 / 会话</TD></TR></TABLE>>];
+    D4e [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D4 治理 / 审计 / 外盒</TD></TR></TABLE>>];
+    E1c -> P5 [label="F05 治理/审计/状态查询与指令"];
+    P5 -> E1c [label="F06 治理报表/审计/运行状态", constraint=false];
+    P5 -> D1e [label="用户与软件配置", dir=both];
+    P5 -> D2e [label="批准/复核/清单与当前授权", dir=both];
+    P5 -> D3e [label="授权变更失效上下文"];
+    P5 -> D4e [label="治理/审计/外盒写入与查询", dir=both];
+  }
+  subgraph cluster_6 {
+    label="P6 异步通知"; sortv=6; color="#c2c8cc"; fontname="Microsoft YaHei";
+    E2b [shape=box, width=3.3, label="E2 可信业务后端 / SDK（重复）\nWebhook 接收方"];
+    P6 [shape=circle, label="P6 通知投递\nM08"];
+    D4f [shape=plain, label=<<TABLE BORDER="0"><TR><TD BORDER="1" SIDES="TB">D4 治理 / 审计 / 外盒</TD></TR></TABLE>>];
+    E2b -> P6 [label="F10 投递 HTTP 确认或失败"];
+    P6 -> E2b [label="F09 签名变更事件", constraint=false];
+    P6 -> D4f [label="认领/投递状态与待办记录", dir=both];
+  }
+}
+@enddot

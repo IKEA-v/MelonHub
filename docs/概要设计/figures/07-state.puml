@@ -1,0 +1,28 @@
+@startuml
+!include _style.puml
+title 图 4-2 WebhookDelivery 状态设计
+state "PENDING\n待投递 / 等待退避" as pending
+state "SENDING\n已认领 / 租约有效" as sending
+state "DELIVERED\n成功终态" as delivered
+state "FAILED\n失败终态" as failed
+[*] --> pending : 同事务创建外盒
+pending --> sending : 认领 [订阅启用且到期\n且状态/尝试版本匹配]\n/ 更新尝试编号与租约
+sending --> delivered : HTTP 2xx [本次认领仍有效]
+sending --> pending : 投递失败 [未达上限且本次认领有效]\n/ 设置退避时刻
+sending --> failed : 投递失败 [达到上限且本次认领有效]
+sending --> pending : 租约到期 [未达上限]
+sending --> failed : 租约到期 [达到上限]
+sending --> pending : 发送队列拒绝 [本次认领有效]\n/ 回退尝试计数
+note right of pending
+订阅停用：保持队列，停止新认领
+重新启用：到期后继续认领
+end note
+note right of sending
+过时结果：状态/尝试编号不匹配
+条件更新影响零行，无状态迁移
+end note
+note bottom of delivered
+终态仅由保留期维护清理
+不清理 PENDING / SENDING
+end note
+@enduml

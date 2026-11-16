@@ -1,0 +1,36 @@
+@startuml
+!include _style.puml
+title 图 4-6 撤权及后续校验（ST03，U3）
+autonumber
+participant "管理控制台\nM01" as admin
+participant "范围校验与分配\nM02/M05" as service
+participant "可选缓存\nM11" as cache
+database "数据访问 M10\n云 MySQL" as db
+participant "可信业务后端" as business
+participant "上下文与鉴权\nM06" as check
+admin -> service : 已认证回收请求、目标软件与角色
+service -> service : 校验管理员职责与软件范围
+group 一个数据库事务
+  service -> db : 按统一锁序校验当前分配
+  service -> cache : 启用时登记事务失效、前置代/busy
+  service -> db : 回收分配、失效相关上下文\n保存必要审计与通知外盒
+  db --> service : 提交成功
+end
+service -> cache : 提交后代失效、结束 busy
+service --> admin : 保存成功
+business -> check : 成功响应之后发起的新校验
+check -> cache : 验证代与结果资格
+cache --> check : 新代/未命中/绕过
+check -> db : 查询当前有效授权
+db --> check : 新状态或上下文失效
+check --> business : 拒绝旧授权或要求重建上下文
+note over cache
+关闭缓存时跳过缓存交互
+部分网络故障可有最长 TTL 旧窗口
+不把该情况承诺为跨实例绝对即时
+end note
+note over db
+分配到期在读取时直接排除
+复核回收必须匹配原 grant_id
+end note
+@enduml

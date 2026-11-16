@@ -1,0 +1,14 @@
+@startdot
+digraph DFD0 {
+  graph [rankdir=LR, bgcolor="white", pad=0.25, nodesep=0.7, ranksep=1.0, dpi=72, label="图 4-3 系统顶层数据流图", labelloc=t, fontname="Microsoft YaHei", fontsize=20];
+  node [fontname="Microsoft YaHei", fontsize=16, color="#374151", margin=0.15];
+  edge [fontname="Microsoft YaHei", fontsize=13, color="#374151", arrowsize=0.8];
+  E1 [shape=box, width=3.6, label="E1\n管理控制台 / 管理员"];
+  P0 [shape=circle, label="P0\nMelonHub\n统一权限平台", width=2.0];
+  E2 [shape=box, width=3.8, label="E2\n可信业务后端 / SDK\n含 Webhook 接收方"];
+  E1 -> P0 [label="F01 登录及账号安全请求\nF03 组织/软件/角色/分配配置\nF05 治理/审计/状态查询与指令"];
+  P0 -> E1 [label="F02 身份结果与会话状态\nF04 配置查询与保存结果\nF06 治理报表/审计/运行状态", constraint=false];
+  E2 -> P0 [label="F07 软件级配置/申请/上下文/校验请求\nF10 投递 HTTP 确认或失败", constraint=false];
+  P0 -> E2 [label="F08 软件级配置/申请/上下文/判断结果\nF09 签名变更事件"];
+}
+@enddot

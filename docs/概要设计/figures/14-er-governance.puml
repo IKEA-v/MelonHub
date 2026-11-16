@@ -1,0 +1,38 @@
+@startuml
+!include _style.puml
+top to bottom direction
+title 图 6-2 治理与安全高级 ER 图
+entity "软件\napplications" as app
+entity "用户\nusers" as user
+entity "管理员\nadmin_accounts" as account
+entity "管理员会话\nadmin_sessions" as session
+entity "软件管理范围\nadmin_account_applications" as scope
+entity "软件密钥\napplication_keys" as key
+entity "角色申请\naccess_requests" as request
+entity "权限复核\naccess_reviews" as review
+entity "复核快照条目\naccess_review_items" as item
+entity "Webhook 订阅\nwebhooks" as hook
+entity "通知投递外盒\nwebhook_deliveries" as delivery
+entity "操作审计\naudit_events" as event
+entity "链尾与锚点\naudit_seal" as seal
+account ||--o{ session : 建立
+account ||--o{ scope : 可管理
+app ||--o{ scope : 被管理
+app ||--o{ key : 签发
+app ||--o{ request : 申请软件
+user |o--o{ request : 申请人
+app ||--o{ review : 发起
+review ||--o{ item : 包含
+user |o--o{ item : 原用户快照
+app ||--o{ hook : 订阅
+hook ||--o{ delivery : 投递
+seal .. event : 封存顺序 / 哈希校验（非外键）
+note bottom of item
+含原角色与 grant_id 快照
+引用可置空，名称及决定保留
+end note
+note bottom of event
+审计与主体使用标识/摘要关联
+不把所有历史引用画成强外键
+end note
+@enduml

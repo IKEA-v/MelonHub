@@ -1,0 +1,32 @@
+@startuml
+!include _style.puml
+title 图 4-5 在线授权与安全检查（ST01/ST02，U1/U2）
+autonumber
+participant "可信业务后端\n含 M12 SDK" as client
+participant "安全入口\nM02" as guard
+participant "上下文与鉴权\nM06" as context
+participant "可选缓存\nM11" as cache
+database "数据访问 M10\n云 MySQL" as db
+client -> guard : API Key、上下文 token、权限编码
+guard -> guard : 认证软件并按软件限流
+alt 认证或限额不通过
+  guard --> client : 拒绝 / 429 / 503
+else 入口通过
+  guard -> context : 可信软件身份与校验数据
+  context -> cache : 查找上下文与有效结果
+  alt 缓存关闭、故障、busy、到期或未命中
+    cache --> context : 绕过或可回填资格
+    context -> db : 验证所属、状态、版本、期限\n读取激活角色权限并集
+    db --> context : 当前事实与最早到期
+    context -> cache : 仅在协议允许时回填
+  else 有效命中
+    cache --> context : 当前代结果与 refreshAt
+  end
+  context --> client : 逐项允许/拒绝或上下文错误
+end
+note over client
+每次受保护操作前在线校验
+错误或未知响应均拒绝
+获准后的业务执行由接入软件完成
+end note
+@enduml

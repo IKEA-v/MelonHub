@@ -1,0 +1,15 @@
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 15
+skinparam dpi 160
+skinparam shadowing false
+skinparam roundCorner 0
+skinparam backgroundColor white
+skinparam ArrowColor #374151
+skinparam LineColor #374151
+skinparam packageStyle rectangle
+skinparam componentStyle uml2
+skinparam classAttributeIconSize 0
+skinparam nodesep 35
+skinparam ranksep 40
+skinparam monochrome true
+hide empty members

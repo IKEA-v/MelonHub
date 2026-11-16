@@ -1,0 +1,35 @@
+@startuml
+!include _style.puml
+top to bottom direction
+title 图 6-1 核心授权高级 ER 图
+entity "软件\napplications" as app
+entity "角色\nroles" as roles
+entity "共享权限\npermissions" as perms
+entity "角色权限关联\nrole_permissions" as rp
+entity "用户\nusers" as users
+entity "部门\ndepartments" as dept
+entity "组织成员\nmemberships" as members
+entity "角色分配\nuser_roles" as grants
+entity "权限上下文\npermission_contexts" as ctx
+entity "激活角色\ncontext_roles" as cr
+app ||--o{ roles : 拥有
+app ||--o{ perms : 拥有
+roles ||--o{ rp : 选择
+perms ||--o{ rp : 复用
+users ||--o{ grants : 获授
+roles ||--o{ grants : 分配
+users ||--o{ members : 加入
+dept ||--o{ members : 组织
+users ||--o{ ctx : 创建
+app ||--o{ ctx : 隔离
+ctx ||--o{ cr : 激活
+roles ||--o{ cr : 被选择
+note bottom of rp
+同软件复合外键约束
+不允许跨软件角色选择权限
+end note
+note bottom of grants
+期限与 grant_id 属于分配
+部门仅作可空来源，不隔离授权
+end note
+@enduml

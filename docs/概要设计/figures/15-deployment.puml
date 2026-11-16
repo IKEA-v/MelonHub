@@ -1,0 +1,34 @@
+@startuml
+!include _style.puml
+title 图 7-1 当前部署与可选节点
+node "管理员本机 / 接入区" as local {
+  artifact "浏览器控制台\nM01" as browser
+  artifact "Vite 回环 :5174" as vite
+  artifact "SSH 通道\n本机回环 :8080" as tunnel
+}
+node "服务器受控区" as server {
+  artifact "SSH 服务\n受控连接" as ssh
+  node "项目独立容器\nmelonhub-backend / JDK 21" as container {
+    artifact "Spring Boot 后端\nM02–M11 / M13\n容器 API :8080" as backend
+    artifact "监测端 :8081\n受控回环" as metrics
+  }
+}
+database "云数据区\n正式 MySQL / 独立测试库\n唯一持久事实源" as db
+database "可选 Redis\n待部署验收，默认关闭" as redis
+node "业务软件受控服务区" {
+  artifact "可信业务后端\nM12 Java SDK" as client
+  artifact "Webhook 接收端" as receiver
+}
+browser --> vite : HTTP / 回环
+vite --> tunnel : /api 代理
+tunnel --> ssh : SSH 加密通道
+ssh --> backend : 服务器回环 :18080\n映射容器 API
+backend --> db : JDBC / TLS
+backend ..> redis : 可选缓存 / 限流
+client ..> backend : 需配置实际可达的受控入口\nHTTP JSON / API Key
+backend --> receiver : 签名 Webhook\n生产接入优先 HTTPS
+note bottom of server
+当前单应用实例；未部署负载均衡或 DMZ 网关
+应用容器自动重启不等于数据高可用
+end note
+@enduml

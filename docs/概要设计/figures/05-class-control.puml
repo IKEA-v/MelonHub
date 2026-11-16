@@ -1,0 +1,74 @@
+@startuml
+!include _style.puml
+top to bottom direction
+title 图 4-1a 核心边界与控制类
+class AdminController <<boundary>> {
+  管理配置与分配()
+}
+class BusinessController <<boundary>> {
+  创建上下文()
+  在线校验()
+}
+class GovernanceController <<boundary>> {
+  处理审批复核()
+}
+class AuthController <<boundary>> {
+  管理员认证()
+}
+class AccountController <<boundary>> {
+  管理员账号维护()
+}
+class RbacService <<control>> {
+  维护配置()
+  分配与回收角色()
+}
+class ContextService <<control>> {
+  签发上下文()
+  计算有效权限()
+  批量校验()
+}
+class GovernanceService <<control>> {
+  批准申请()
+  关闭复核()
+}
+class AuthService <<control>> {
+  验证管理员或密钥()
+  维护会话()
+}
+class PermissionCache <<control>> {
+  查找可重建结果()
+  登记事务失效()
+}
+class WebhookService <<control>> {
+  同事务排队()
+  条件认领与投递()
+}
+class "DAO 组件" as DAO <<boundary>> {
+  查询与持久化()
+}
+class AdminPrincipal <<value object>> {
+  username
+  role
+  applicationIds
+}
+AdminController ..> RbacService
+AdminController ..> AdminPrincipal : 范围
+BusinessController ..> ContextService
+BusinessController ..> RbacService
+GovernanceController ..> GovernanceService
+AuthController ..> AuthService
+AccountController ..> AuthService
+RbacService ..> DAO
+ContextService ..> DAO
+GovernanceService ..> DAO
+AuthService ..> DAO
+WebhookService ..> DAO
+RbacService ..> PermissionCache : 失效
+ContextService ..> PermissionCache : 查询
+RbacService ..> WebhookService : 外盒
+GovernanceService ..> WebhookService : 外盒
+note bottom
+依赖只表示核心协作；未穷举所有方法或持有字段。
+DAO 为持久化边界，不把数据库关系伪装成 Java 继承。
+end note
+@enduml

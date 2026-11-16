@@ -1,0 +1,58 @@
+@startuml
+!include _style.puml
+top to bottom direction
+title 图 3-1 逻辑组件与分层
+package "客户端 / 接入" {
+  [M01 Vue 管理控制台] as ui
+  [M12 Java SDK] as sdk
+}
+package "访问与 HTTP 边界" {
+  [M02 security\n统一认证、管理员范围、限流] as security
+  [controller\nHTTP 协议与范围校验] as controllers
+}
+package "业务层 service" {
+  [M03 组织资料] as org
+  [M04 软件与 RBAC 配置] as config
+  [M05 授权分配] as grants
+  [M06 上下文与鉴权] as contexts
+  [M07 治理与查询] as gov
+  [M08 通知外盒] as hooks
+  [M09 审计与维护] as audit
+}
+package "数据访问层 dao" {
+  [M10 数据访问\n查询、行锁、条件更新] as dao
+}
+package "基础设施" {
+  [M11 cache\n可选结果缓存与失效] as cache
+  [M13 config / 运行监测\n数据源保护、迁移、健康] as ops
+  database MySQL as db
+  database "可选 Redis" as redis
+}
+ui --> security
+sdk --> security
+security --> controllers
+controllers --> org
+controllers --> config
+controllers --> grants
+controllers --> contexts
+controllers --> gov
+controllers --> hooks
+controllers --> audit
+org --> dao
+config --> dao
+grants --> dao
+contexts --> dao
+gov --> dao
+hooks --> dao
+audit --> dao
+dao --> db
+contexts ..> cache
+grants ..> cache
+cache ..> redis
+ops --> db
+note bottom of config
+M03–M05 是职责划分
+当前复用 RbacService/RbacDao
+不是独立微服务或额外空转层
+end note
+@enduml

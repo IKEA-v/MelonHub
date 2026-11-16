@@ -1,0 +1,34 @@
+@startuml
+!include _style.puml
+title 图 4-7 外盒通知与恢复（ST04，U4）
+autonumber
+participant "授权变更模块\nM05/M07" as write
+database "数据访问 M10\n外盒与业务事实" as db
+participant "通知调度与发送池\nM08" as sender
+participant "业务 Webhook\n接收方" as receiver
+write -> db : 同事务保存业务变更、必要审计与外盒
+db --> write : 提交
+write --> write : 返回业务结果，不等待 HTTP
+sender -> db : 查找已到期且订阅启用的待投递
+db --> sender : 待办及尝试版本
+sender -> db : 条件认领为 SENDING\n更新尝试编号与租约
+db --> sender : 本次认领成功
+sender -> receiver : 签名事件、时间戳、投递标识
+alt HTTP 2xx 且本次认领仍有效
+  receiver --> sender : 接收确认
+  sender -> db : 条件记录 DELIVERED
+else 超时或失败
+  sender -> db : 条件回队退避或达到上限 FAILED
+end
+opt 发送进程中断后租约过期
+  sender -> db : 未达上限回队，最后一次则 FAILED
+end
+note over sender,db
+结果回写必须匹配状态及尝试编号
+旧线程不能覆盖后来认领的结果
+end note
+note over receiver
+验签、校验时间窗
+按事件标识去重，允许重复到达
+end note
+@enduml

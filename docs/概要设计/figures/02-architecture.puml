@@ -1,0 +1,38 @@
+@startuml
+!include _style.puml
+top to bottom direction
+title 图 2-1 系统总体结构
+actor 管理员 as admin
+node "管理控制台 M01" as console
+node "可信业务后端\n含 Java SDK M12" as business
+rectangle "MelonHub 后端分层单体" {
+  component "安全入口 M02\n认证、范围、限流" as guard
+  component "HTTP 边界\nController" as http
+  component "业务层\n配置 M03/M04、分配 M05\n上下文 M06、治理 M07" as service
+  component "通知 M08\n审计维护 M09" as jobs
+  component "数据访问 M10\nDAO" as dao
+  component "可选缓存 M11" as cache
+  component "启动与监测 M13" as ops
+}
+database "云 MySQL\n唯一持久事实源" as mysql
+database "可选 Redis\n当前默认关闭" as redis
+admin --> console
+console --> guard : 管理员会话 / HTTP JSON
+business --> guard : API Key / 上下文 token
+guard --> http : 可信调用身份
+http --> service : 用例请求
+service --> dao : 查询与事务写入
+service --> jobs : 同事务审计 / 外盒
+jobs --> dao
+service ..> cache : 缓存与失效
+guard ..> cache : 密钥状态
+cache ..> redis : 可重建数据
+dao --> mysql : JDBC / TLS
+jobs --> business : 签名 Webhook
+ops --> mysql : 启动保护 / 迁移 / 健康
+note bottom of service
+软件隔离角色与共享权限
+部门仅组织人员与筛选
+业务用户认证与业务执行在外部
+end note
+@enduml

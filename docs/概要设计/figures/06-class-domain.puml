@@ -1,0 +1,63 @@
+@startuml
+!include _style.puml
+left to right direction
+title 图 4-1b 关键领域设计类（概念到设计的抽象）
+class Application <<entity>> {
+  id / code
+  enabled
+  验证可用()
+}
+class Role <<entity>> {
+  code
+  enabled
+  选择权限()
+}
+class Permission <<entity>> {
+  code
+  resource / action
+}
+class User <<entity>> {
+  externalId
+  enabled / contextVersion
+}
+class Department <<entity>> {
+  code / name
+}
+class RoleAssignment <<entity>> {
+  grantId
+  expiresAt
+  判断有效()
+}
+class PermissionContext <<entity>> {
+  tokenHash
+  expiresAt / contextVersion
+  验证当前状态()
+}
+class EffectivePermissions <<value object>> {
+  roleSet / permissionSet
+  refreshAt
+  逐项判断()
+}
+Application "1" o-- "0..*" Role : 软件拥有
+Application "1" o-- "0..*" Permission : 共享定义
+Role "0..*" -- "0..*" Permission : 同软件选择
+User "0..*" -- "0..*" Department : 组织成员
+User "1" -- "0..*" RoleAssignment
+Role "1" -- "0..*" RoleAssignment
+User "1" -- "0..*" PermissionContext
+Application "1" -- "0..*" PermissionContext
+PermissionContext "0..*" -- "0..*" Role : 激活子集
+PermissionContext ..> EffectivePermissions : 按当前事实求值
+note bottom of RoleAssignment
+新授权 / 续期改变 grantId
+旧复核仅匹配原授予实例
+end note
+note bottom of Department
+部门不拥有角色或权限
+无部门用户也可授权
+end note
+note bottom of EffectivePermissions
+当前以 JDBC + record/Map 实现
+本图不是已有 JPA Entity 类清单
+end note
+@enduml
