@@ -1,8 +1,6 @@
-FROM swr.cn-north-4.myhuaweicloud.com/oomall-javaee/openjdk:21-alpine
+FROM swr.cn-north-4.myhuaweicloud.com/oomall-javaee/nginx:stable-alpine
 
-COPY dist /app
-COPY StaticServer.java /tmp/StaticServer.java
-RUN javac /tmp/StaticServer.java
+COPY dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
-CMD ["java", "-cp", "/tmp", "StaticServer", "/app", "80"]

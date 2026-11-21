@@ -1,0 +1,34 @@
+@startuml
+title MelonHub 后端包图
+skinparam packageStyle rectangle
+skinparam shadowing false
+top to bottom direction
+package "com.melonhub.rbac" {
+  package controller
+  package security
+  package dto
+  package identity
+  package service
+  package cache
+  package dao
+  package repository
+  package entity
+  package config
+  package exception
+}
+controller ..> dto
+controller ..> service
+controller ..> identity
+controller ..> security
+security ..> service
+security ..> exception
+identity ..> dao
+identity ..> exception
+service ..> dao
+service ..> cache
+service ..> exception
+dao ..> repository
+dao ..> entity
+repository ..> entity
+config ..> security
+@enduml

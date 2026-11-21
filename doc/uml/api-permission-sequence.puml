@@ -1,0 +1,40 @@
+@startuml
+title GET /auth/api-permissions/{operationId} · 时序图
+hide footbox
+skinparam shadowing false
+actor "obj: HTTP 调用者" as Caller
+participant "controller: IdentityController" as C
+participant "service: IdentityService" as S
+participant "tokenService: IdentityTokenService" as T
+participant "identityDao: IdentityDao" as D
+activate Caller
+autonumber
+Caller -> C: GET /auth/api-permissions/{operationId}
+activate C
+C -> S: checkApiPermission(authorization, operationId)
+activate S
+S -> T: claims = verify(token, COURSE_SYSTEM)
+activate T
+deactivate T
+S -> D: active = activeSession(tokenHash, now)
+activate D
+deactivate D
+S -> D: user = userByExternalId(claims.subject())
+activate D
+deactivate D
+alt 未知 operationId
+  autonumber stop
+  S --> Caller: 404 API_OPERATION_NOT_FOUND
+else 已登记 operationId
+  autonumber resume
+  S -> D: permissions = permissions(user.id(), COURSE_SYSTEM)
+  activate D
+  deactivate D
+  autonumber stop
+  S --> C: operationId, allowed
+  C --> Caller: 200 JSON
+end
+deactivate S
+deactivate C
+deactivate Caller
+@enduml

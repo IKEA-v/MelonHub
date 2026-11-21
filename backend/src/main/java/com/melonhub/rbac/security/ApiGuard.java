@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.servlet.HandlerMapping;
 
 /**
  * Authenticates every /api request before it reaches a controller. Access is denied by default: only the
@@ -54,8 +56,10 @@ public class ApiGuard extends OncePerRequestFilter {
         this.loginsPerMinute = loginsPerMinute;
     }
 
+    /** 在同一个请求编号下执行鉴权、分派控制器并记录已匹配的 API 请求。 */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
+        long start = System.nanoTime();
         String supplied = request.getHeader("X-Request-Id");
         String requestId = supplied != null && REQUEST_ID.matcher(supplied).matches() ? supplied : UUID.randomUUID().toString();
         MDC.put("requestId", requestId);
@@ -65,6 +69,7 @@ public class ApiGuard extends OncePerRequestFilter {
         response.setHeader("Referrer-Policy", "no-referrer");
         response.setHeader("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
         response.setHeader("Cache-Control", "no-store");
+        boolean completed = false;
         try {
             try {
                 authenticate(request);
@@ -77,9 +82,26 @@ public class ApiGuard extends OncePerRequestFilter {
                 return;
             }
             chain.doFilter(request, response);
+            completed = true;
         } finally {
-            MDC.remove("requestId");
+            try {
+                logCompletion(request, requestId, completed ? response.getStatus() : 500, start);
+            } finally {
+                MDC.remove("requestId");
+            }
         }
+    }
+
+    /** 使用 MVC 路由模板记录结果，避免把路径参数、查询串、请求头或请求体写入日志。 */
+    private void logCompletion(HttpServletRequest request, String requestId, int status, long start) {
+        Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        if (!(pattern instanceof String route) || route.equals("/api/health")
+                || !(route.startsWith("/api/") || route.startsWith("/auth/"))) {
+            return;
+        }
+        long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        log.info("HTTP requestId={} method={} route={} status={} durationMs={}",
+                requestId, request.getMethod(), route, status, durationMs);
     }
 
     private void authenticate(HttpServletRequest request) {

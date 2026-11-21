@@ -1,16 +1,23 @@
 openapi: 3.1.0
 info:
-  title: MelonHub Unified Identity API
-  version: 1.0.0
-  description: 供课程项目管理系统联调使用的统一身份与权限接口。
+  title: MelonHub 统一身份与分级管理员 API
+  version: 1.1.0
+  description: 统一身份联调接口及分级管理员验收接口。完整控制台与业务接口见仓库 doc/API.md。
 servers:
-  - url: https://identity.example.edu
+  - url: http://127.0.0.1:8080
+    description: 本机联调
+
 security:
   - bearerAuth: []
+tags:
+  - name: 统一身份与权限
+  - name: 平台管理员
 paths:
   /auth/login:
     post:
       security: []
+      operationId: loginIdentity
+      tags: [统一身份与权限]
       summary: 登录
       requestBody:
         required: true
@@ -18,75 +25,167 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/LoginInput' }
       responses:
-        '200': { description: 登录成功, content: { application/json: { schema: { $ref: '#/components/schemas/LoginVO' } } } }
+        '200': { headers: { X-Request-Id: { $ref: '#/components/headers/RequestId' } }, description: 登录成功, content: { application/json: { schema: { $ref: '#/components/schemas/LoginVO' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /auth/logout:
     post:
+      operationId: logoutIdentity
+      tags: [统一身份与权限]
       summary: 退出登录
       responses:
-        '204': { description: 已退出 }
+        '204': { description: 已退出, headers: { X-Request-Id: { $ref: '#/components/headers/RequestId' } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /auth/me:
     get:
+      operationId: getIdentity
+      tags: [统一身份与权限]
       summary: 当前用户、角色与权限
       responses:
-        '200': { description: 当前身份, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityCurrentUserVO' } } } }
+        '200': { headers: { X-Request-Id: { $ref: '#/components/headers/RequestId' } }, description: 当前身份, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityCurrentUserVO' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /auth/permissions/{permission}:
     get:
+      operationId: checkUiPermission
+      tags: [统一身份与权限]
       summary: 校验前端权限
       parameters:
         - { name: permission, in: path, required: true, schema: { type: string, minLength: 1 } }
       responses:
-        '200': { description: 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/Allowed' } } } }
+        '200': { headers: { X-Request-Id: { $ref: '#/components/headers/RequestId' } }, description: 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/Allowed' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /auth/api-permissions/{operationId}:
     get:
+      operationId: checkApiPermission
+      tags: [统一身份与权限]
       summary: 校验 API 全局权限
+      description: 使用接入系统声明的 OpenAPI operationId。无权限返回 allowed=false，未登记的操作返回 404。
       parameters:
         - { name: operationId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
       responses:
-        '200': { description: 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/ApiAllowed' } } } }
+        '200': { headers: { X-Request-Id: { $ref: '#/components/headers/RequestId' } }, description: 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/ApiAllowed' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { description: operationId 不存在 }
+        '404': { $ref: '#/components/responses/NotFound' }
   /auth/departments:
     get:
+      operationId: listIdentityDepartments
+      tags: [统一身份与权限]
       summary: 查询部门
+      description: 默认页码为 1，每页 20 条。页码小于 1 时按 1 处理，每页条数限制在 1 到 100。
       parameters:
-        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
-        - { name: parentId, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: keyword, in: query, schema: { type: string } }
+        - { name: parentId, in: query, schema: { type: integer, format: int64, minimum: 1 } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
-        '200': { description: 部门分页结果, content: { application/json: { schema: { $ref: '#/components/schemas/PageDepartment' } } } }
+        '200': { headers: { X-Request-Id: { $ref: '#/components/headers/RequestId' } }, description: 部门分页结果, content: { application/json: { schema: { $ref: '#/components/schemas/PageDepartment' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /auth/departments/{departmentId}/users:
     get:
+      operationId: listIdentityDepartmentUsers
+      tags: [统一身份与权限]
       summary: 查询部门用户
+      description: 默认页码为 1，每页 20 条。页码小于 1 时按 1 处理，每页条数限制在 1 到 100。
       parameters:
-        - { name: departmentId, in: path, required: true, schema: { type: integer, minimum: 1 } }
-        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: departmentId, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+        - { name: keyword, in: query, schema: { type: string } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
-        '200': { description: 用户分页结果, content: { application/json: { schema: { $ref: '#/components/schemas/PageUser' } } } }
+        '200': { headers: { X-Request-Id: { $ref: '#/components/headers/RequestId' } }, description: 用户分页结果, content: { application/json: { schema: { $ref: '#/components/schemas/PageUser' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { description: 部门不存在 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /auth/users/{userId}:
     get:
+      operationId: getIdentityUser
+      tags: [统一身份与权限]
       summary: 查询统一身份用户
       parameters:
         - { name: userId, in: path, required: true, schema: { type: string } }
       responses:
-        '200': { description: 用户资料, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityUser' } } } }
+        '200': { headers: { X-Request-Id: { $ref: '#/components/headers/RequestId' } }, description: 用户资料, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityUser' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { description: 用户不存在 }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/admin/accounts:
+    post:
+      operationId: createAdminAccount
+      tags: [平台管理员]
+      summary: 创建下级管理员
+      description: 需要 account.manage 功能。下级可管理的功能、部门和软件均受上级范围约束。
+      security:
+        - consoleSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminAccountInput' }
+      responses:
+        '200':
+          description: 创建成功
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [username]
+                properties:
+                  username: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    consoleSession: { type: http, scheme: bearer, description: MelonHub 管理控制台会话 }
+  headers:
+    RequestId:
+      description: 请求编号，用于关联后端请求日志。
+      schema: { type: string }
   responses:
+    BadRequest:
+      description: 请求字段或格式无效
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
       description: 未登录或令牌失效
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: 当前账号缺少相应功能或管理范围
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: 目标记录或操作未找到
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: 管理员层级约束或数据唯一性冲突
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -97,20 +196,36 @@ components:
       properties:
         code: { type: string }
         message: { type: string }
+        requestId: { type: string, description: 用于关联后端日志的请求编号 }
+    AdminAccountInput:
+      type: object
+      required: [username, role, password]
+      properties:
+        username: { type: string, minLength: 3, maxLength: 100 }
+        displayName: { type: string, maxLength: 100 }
+        role: { type: string }
+        password: { type: string, format: password, minLength: 12, maxLength: 100, writeOnly: true, description: UTF-8 编码最多 72 字节 }
+        enabled: { type: boolean, default: true }
+        parentUsername: { type: string, description: 省略时使用当前管理员 }
+        kind: { type: string, enum: [MANAGER, DEPARTMENT], default: MANAGER }
+        allDepartments: { type: boolean }
+        departmentIds: { type: array, maxItems: 200, items: { type: integer, format: int64, minimum: 1 } }
+        allApplications: { type: boolean }
+        applicationIds: { type: array, maxItems: 200, items: { type: integer, format: int64, minimum: 1 } }
     LoginInput:
       type: object
       required: [username, password, systems]
       properties:
         username: { type: string, minLength: 1, maxLength: 128 }
         password: { type: string, format: password, minLength: 1, maxLength: 256, writeOnly: true }
-        systems: { type: array, minItems: 1, uniqueItems: true, items: { type: string, minLength: 1 } }
+        systems: { type: array, minItems: 1, maxItems: 20, items: { type: string, minLength: 1, maxLength: 128 } }
     LoginVO:
       type: object
       required: [accessToken, tokenType, expiresIn]
       properties:
         accessToken: { type: string }
         tokenType: { type: string, example: Bearer }
-        expiresIn: { type: integer, minimum: 1 }
+        expiresIn: { type: integer, format: int64, minimum: 1 }
     IdentityCurrentUserVO:
       type: object
       required: [subject, roles, permissions]
@@ -119,7 +234,7 @@ components:
         roles: { type: array, items: { type: string } }
         permissions: { type: array, items: { type: string } }
         name: { type: string }
-        no: { type: string }
+        "no": { type: string }
     Allowed:
       type: object
       required: [allowed]
@@ -134,40 +249,40 @@ components:
       type: object
       required: [id, code, name, hasChildren]
       properties:
-        id: { type: integer }
+        id: { type: integer, format: int64 }
         code: { type: string }
         name: { type: string }
-        parentId: { type: [integer, 'null'] }
+        parentId: { type: [integer, 'null'], format: int64 }
         hasChildren: { type: boolean }
     DepartmentUser:
       type: object
-      required: [userId, no, name, departmentId, departmentName]
+      required: [userId, "no", name, departmentId, departmentName]
       properties:
         userId: { type: string }
-        no: { type: string }
+        "no": { type: string }
         name: { type: string }
-        departmentId: { type: integer }
+        departmentId: { type: integer, format: int64 }
         departmentName: { type: string }
     PageDepartment:
       type: object
       required: [page, pageSize, total, items]
       properties:
-        page: { type: integer }
-        pageSize: { type: integer }
-        total: { type: integer }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, format: int64, minimum: 0 }
         items: { type: array, items: { $ref: '#/components/schemas/Department' } }
     PageUser:
       type: object
       required: [page, pageSize, total, items]
       properties:
-        page: { type: integer }
-        pageSize: { type: integer }
-        total: { type: integer }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, format: int64, minimum: 0 }
         items: { type: array, items: { $ref: '#/components/schemas/DepartmentUser' } }
     IdentityUser:
       type: object
-      required: [userId, no, name]
+      required: [userId, "no", name]
       properties:
         userId: { type: string }
-        no: { type: string }
+        "no": { type: string }
         name: { type: string }

@@ -1,0 +1,49 @@
+@startuml
+title POST /api/admin/accounts · 时序图
+hide footbox
+skinparam shadowing false
+actor "obj: HTTP 调用者" as Caller
+participant "controller: AccountController" as C
+participant "auth: AuthService" as S
+participant "dao: AuthDao" as D
+participant "roles: AdminRoleDao" as R
+participant "candidate: AdminTree" as T
+activate Caller
+autonumber
+Caller -> C: POST /api/admin/accounts
+activate C
+C -> S: createAccount(input, actor)
+activate S
+S -> D: lockAccounts()
+activate D
+deactivate D
+S -> D: nodes = nodes()
+activate D
+deactivate D
+S -> R: roleFunctions = functionsByRole()
+activate R
+deactivate R
+S -> T: violations = violations()
+activate T
+deactivate T
+alt 候选树违反层级或范围规则
+  autonumber stop
+  S --> Caller: 409 CONFLICT
+else 候选树满足规则
+  autonumber resume
+  S -> D: createAccount(...)
+  activate D
+  deactivate D
+  S -> D: replaceAccountApplications(...)
+  activate D
+  deactivate D
+  S -> D: replaceAccountDepartments(...)
+  activate D
+  deactivate D
+  autonumber stop
+  C --> Caller: 200 {username}
+end
+deactivate S
+deactivate C
+deactivate Caller
+@enduml

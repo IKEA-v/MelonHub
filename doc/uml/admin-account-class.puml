@@ -1,0 +1,32 @@
+@startuml
+title 创建分级管理员 · 类图
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+hide empty members
+class AccountController {
+  - auth: AuthService
+  + create(body: Account, req: HttpServletRequest): Map
+}
+class AuthService {
+  - dao: AuthDao
+  - roles: AdminRoleDao
+  + createAccount(input: Account, actor: AdminPrincipal): void
+}
+class AdminTree {
+  - nodes: Map
+  - roleFunctions: Map
+  + manages(actor: String, target: String): boolean
+  + violations(): List
+}
+class AuthDao {
+  + lockAccounts(): void
+  + nodes(): List
+}
+class AdminRoleDao {
+  + functionsByRole(): Map
+}
+AccountController -down-> AuthService : auth
+AuthService -left-> AuthDao : dao
+AuthService -right-> AdminRoleDao : roles
+AuthService ..down> AdminTree
+@enduml

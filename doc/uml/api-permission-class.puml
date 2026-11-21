@@ -1,0 +1,27 @@
+@startuml
+title API 全局权限查询 · 类图
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+hide empty members
+class IdentityController {
+  - identityService: IdentityService
+  + apiPermission(authorization: String, operationId: String): Map
+}
+class IdentityService {
+  - identityDao: IdentityDao
+  - tokenService: IdentityTokenService
+  + checkApiPermission(authorization: String, operationId: String): Map
+  - authenticatedUser(authorization: String): UserRow
+}
+class IdentityDao {
+  + activeSession(tokenHash: String, now: Instant): boolean
+  + userByExternalId(externalId: String): Optional
+  + permissions(userId: long, system: String): List
+}
+class IdentityTokenService {
+  + verify(token: String, system: String): Claims
+}
+IdentityController -down-> IdentityService : identityService
+IdentityService -left-> IdentityDao : identityDao
+IdentityService -right-> IdentityTokenService : tokenService
+@enduml
