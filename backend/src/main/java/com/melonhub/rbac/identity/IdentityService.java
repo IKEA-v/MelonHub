@@ -1,0 +1,307 @@
+package com.melonhub.rbac.identity;
+
+import com.melonhub.rbac.dao.IdentityDao;
+import com.melonhub.rbac.dto.Requests;
+import com.melonhub.rbac.exception.ApiException;
+import com.melonhub.rbac.security.Credentials;
+import com.melonhub.rbac.service.RbacService;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 统一身份认证与课程系统权限查询应用服务。
+ */
+@Service
+public class IdentityService {
+
+    private static final String COURSE_SYSTEM = "course-project-management";
+    private static final Map<String, String> API_PERMISSION_CODES = Map.ofEntries(
+            Map.entry("listTerms", "CV"),
+            Map.entry("createTerm", "TC"),
+            Map.entry("updateTerm", "TE"),
+            Map.entry("deleteTerm", "TD"),
+            Map.entry("setCurrentTerm", "TCM"),
+            Map.entry("cancelCurrentTerm", "TCM"),
+            Map.entry("getCourse", "CV"),
+            Map.entry("createCourse", "CE"),
+            Map.entry("submitCourseReview", "CR"),
+            Map.entry("reviewCourse", "CR"),
+            Map.entry("updateCourse", "CE"),
+            Map.entry("deleteCourse", "CD"),
+            Map.entry("copyCourse", "CC"),
+            Map.entry("setCourseLeaders", "CTM"),
+            Map.entry("listAdminCourses", "CV"),
+            Map.entry("listTeachers", "TV"),
+            Map.entry("createTeacher", "TEC"),
+            Map.entry("updateTeacher", "TEE"),
+            Map.entry("deleteTeacher", "TED"),
+            Map.entry("queryAuditLogs", "AV")
+    );
+
+    private final IdentityDao identityDao;
+    private final RbacService rbacService;
+    private final PasswordEncoder passwordEncoder;
+    private final IdentityTokenService tokenService;
+
+    /**
+     * 创建统一身份服务。
+     *
+     * @param identityDao 统一身份持久化端口
+     * @param rbacService RBAC 授权服务
+     * @param passwordEncoder 密码编码器
+     * @param tokenService JWT 服务
+     */
+    public IdentityService(
+            IdentityDao identityDao,
+            RbacService rbacService,
+            PasswordEncoder passwordEncoder,
+            IdentityTokenService tokenService
+    ) {
+        this.identityDao = identityDao;
+        this.rbacService = rbacService;
+        this.passwordEncoder = passwordEncoder;
+        this.tokenService = tokenService;
+    }
+
+    /**
+     * 登录并签发 JWT。
+     *
+     * @param username 登录名
+     * @param password 明文密码，仅在当前调用栈中使用
+     * @param systems 目标系统
+     * @return 登录响应
+     */
+    @Transactional
+    public Map<String, Object> login(String username, String password, List<String> systems) {
+        if (systems == null || systems.isEmpty() || !systems.contains(COURSE_SYSTEM)) {
+            throw ApiException.bad("systems 必须包含 course-project-management");
+        }
+        IdentityDao.CredentialRow credential = identityDao.credential(username)
+                .orElseThrow(() -> new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "账号或密码错误。"));
+        if (!passwordEncoder.matches(password, credential.passwordHash())) {
+            throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "账号或密码错误。");
+        }
+        Instant issuedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        String token = tokenService.issue(credential.username(), systems, issuedAt);
+        IdentityTokenService.Claims claims = tokenService.verify(token, COURSE_SYSTEM);
+        identityDao.createSession(Credentials.hash(token), credential.userId(), COURSE_SYSTEM, claims.expiresAt());
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("accessToken", token);
+        response.put("tokenType", "Bearer");
+        response.put("expiresIn", claims.expiresAt().getEpochSecond() - issuedAt.getEpochSecond());
+        return response;
+    }
+
+    /**
+     * 撤销当前令牌。
+     *
+     * @param authorization Authorization 请求头
+     */
+    @Transactional
+    public void logout(String authorization) {
+        String token = bearerToken(authorization);
+        tokenService.verify(token, COURSE_SYSTEM);
+        identityDao.revokeSession(Credentials.hash(token), Instant.now());
+    }
+
+    /**
+     * 查询当前身份、角色和前端权限。
+     *
+     * @param authorization Authorization 请求头
+     * @return 当前用户响应
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> currentUser(String authorization) {
+        IdentityTokenService.Claims claims = authenticated(authorization);
+        IdentityDao.UserRow user = identityDao.userByExternalId(claims.subject())
+                .orElseThrow(() -> new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "请先登录。"));
+        List<String> roles = identityDao.roles(user.id(), COURSE_SYSTEM).stream()
+                .map(value -> value.toLowerCase(Locale.ROOT))
+                .toList();
+        List<String> permissions = identityDao.permissions(user.id(), COURSE_SYSTEM);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("subject", user.externalId());
+        response.put("roles", roles);
+        response.put("permissions", permissions);
+        response.put("name", user.name());
+        response.put("no", user.externalId());
+        return response;
+    }
+
+    /**
+     * 查询组织部门。
+     *
+     * @param authorization Authorization 请求头
+     * @param keyword 关键字
+     * @param parentId 父部门
+     * @param page 页码
+     * @param pageSize 页大小
+     * @return 分页结果
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> departments(String authorization, String keyword, Long parentId, int page, int pageSize) {
+        IdentityDao.UserRow user = authenticatedUser(authorization);
+        requirePermission(user.id(), "ORG_VIEW");
+        List<IdentityDao.DepartmentRow> rows = identityDao.departments(keyword, parentId, page, pageSize);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (IdentityDao.DepartmentRow row : rows) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", row.id());
+            item.put("code", row.code());
+            item.put("name", row.name());
+            item.put("parentId", row.parentId());
+            item.put("hasChildren", row.hasChildren());
+            items.add(item);
+        }
+        return page(page, pageSize, identityDao.departmentCount(keyword, parentId), items);
+    }
+
+    /**
+     * 查询部门用户。
+     *
+     * @param authorization Authorization 请求头
+     * @param departmentId 部门主键
+     * @param keyword 关键字
+     * @param page 页码
+     * @param pageSize 页大小
+     * @return 分页结果
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> departmentUsers(String authorization, long departmentId, String keyword, int page, int pageSize) {
+        IdentityDao.UserRow user = authenticatedUser(authorization);
+        requirePermission(user.id(), "ORG_VIEW");
+        if (!identityDao.departmentExists(departmentId)) {
+            throw new ApiException(org.springframework.http.HttpStatus.NOT_FOUND, "IDENTITY_DEPARTMENT_NOT_FOUND", "统一身份认证系统中没有找到该部门。");
+        }
+        List<IdentityDao.DepartmentUserRow> rows = identityDao.departmentUsers(departmentId, keyword, page, pageSize);
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (IdentityDao.DepartmentUserRow row : rows) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("userId", row.userId());
+            item.put("no", row.no());
+            item.put("name", row.name());
+            item.put("departmentId", row.departmentId());
+            item.put("departmentName", row.departmentName());
+            items.add(item);
+        }
+        return page(page, pageSize, identityDao.departmentUserCount(departmentId, keyword), items);
+    }
+
+    /**
+     * 校验前端菜单或按钮权限。
+     *
+     * @param authorization Authorization 请求头
+     * @param permission 权限编码
+     * @return 是否允许
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> checkPermission(String authorization, String permission) {
+        IdentityDao.UserRow user = authenticatedUser(authorization);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("allowed", identityDao.permissions(user.id(), COURSE_SYSTEM).contains(permission));
+        return response;
+    }
+
+    /**
+     * 校验课程系统 API 的全局权限。
+     *
+     * @param authorization Authorization 请求头
+     * @param operationId OpenAPI operationId
+     * @return 是否允许
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> checkApiPermission(String authorization, String operationId) {
+        IdentityDao.UserRow user = authenticatedUser(authorization);
+        String permission = API_PERMISSION_CODES.get(operationId);
+        if (permission == null) {
+            throw new ApiException(org.springframework.http.HttpStatus.NOT_FOUND, "API_OPERATION_NOT_FOUND", "没有找到对应的 API 操作。");
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("operationId", operationId);
+        response.put("allowed", identityDao.permissions(user.id(), COURSE_SYSTEM).contains(permission));
+        return response;
+    }
+
+    /**
+     * 查询统一身份用户。
+     *
+     * @param authorization Authorization 请求头
+     * @param userId 外部用户标识
+     * @return 用户信息
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> lookupUser(String authorization, String userId) {
+        IdentityDao.UserRow current = authenticatedUser(authorization);
+        requirePermission(current.id(), "TEC");
+        IdentityDao.UserRow user = identityDao.userByExternalId(userId)
+                .orElseThrow(() -> new ApiException(org.springframework.http.HttpStatus.NOT_FOUND, "IDENTITY_USER_NOT_FOUND", "统一身份认证系统中没有找到该用户。"));
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("userId", user.externalId());
+        response.put("no", user.externalId());
+        response.put("name", user.name());
+        return response;
+    }
+
+    /**
+     * 创建或更新一个可登录的统一身份用户。
+     *
+     * @param body 用户资料
+     * @param actor 操作人
+     * @return 用户主键
+     */
+    @Transactional
+    public long provisionUser(Requests.User body, String password, String actor) {
+        Long existingId = identityDao.userByExternalId(body.externalId()).map(IdentityDao.UserRow::id).orElse(null);
+        long userId = rbacService.user(body, existingId, actor);
+        identityDao.upsertCredential(userId, body.externalId(), passwordEncoder.encode(password));
+        return userId;
+    }
+
+    private IdentityTokenService.Claims authenticated(String authorization) {
+        String token = bearerToken(authorization);
+        IdentityTokenService.Claims claims = tokenService.verify(token, COURSE_SYSTEM);
+        if (!identityDao.activeSession(Credentials.hash(token), Instant.now())) {
+            throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "请先登录或令牌已失效。");
+        }
+        return claims;
+    }
+
+    private IdentityDao.UserRow authenticatedUser(String authorization) {
+        IdentityTokenService.Claims claims = authenticated(authorization);
+        return identityDao.userByExternalId(claims.subject())
+                .orElseThrow(() -> new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "请先登录。"));
+    }
+
+    private void requirePermission(long userId, String permission) {
+        List<String> permissions = identityDao.permissions(userId, COURSE_SYSTEM);
+        List<String> roles = identityDao.roles(userId, COURSE_SYSTEM);
+        if (!permissions.contains(permission) && !roles.contains("admin")) {
+            throw ApiException.forbidden("你没有查询统一身份组织架构的权限。");
+        }
+    }
+
+    private static String bearerToken(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ") || authorization.length() <= 7) {
+            throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "请先登录。");
+        }
+        return authorization.substring(7).trim();
+    }
+
+    private static Map<String, Object> page(int page, int pageSize, long total, List<Map<String, Object>> items) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("page", page);
+        response.put("pageSize", pageSize);
+        response.put("total", total);
+        response.put("items", items);
+        return response;
+    }
+}

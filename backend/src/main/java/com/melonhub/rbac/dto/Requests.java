@@ -117,6 +117,27 @@ public final class Requests {
                                 @Size(max=150) String email, @NotNull @Size(max=100) List<@NotBlank @Size(max=64) String> departmentCodes) {}
     public record UserImport(@NotNull @Size(min=1,max=500) List<UserImportRow> users) {}
 
+    /**
+     * 统一身份用户导入行，密码只用于生成 BCrypt 摘要，不会写入明文。
+     */
+    public record IdentityUserRow(@NotBlank @Size(max=100) String name,
+                                  @NotBlank @Size(max=128) String username,
+                                  @NotBlank @Size(max=256) String password,
+                                  @Size(max=150) String email,
+                                  @NotNull @Size(max=100) List<@NotNull @Positive Long> departmentIds) {}
+
+    /**
+     * 统一身份用户批量导入请求。
+     */
+    public record IdentityUserImport(@NotNull @Size(min=1,max=500) List<@Valid IdentityUserRow> users) {}
+
+    /**
+     * 统一身份登录请求。
+     */
+    public record IdentityLogin(@NotBlank @Size(max=128) String username,
+                                @NotBlank @Size(max=256) String password,
+                                @NotNull @Size(min=1,max=20) List<@NotBlank @Size(max=128) String> systems) {}
+
     // ---- permission manifest (export/import of one application's roles and permissions) ----
     public record ManifestPermission(@NotBlank @Pattern(regexp=DOMAIN_CODE) String code, @NotBlank @Size(max=100) String name,
                                      @NotBlank @Size(max=100) String resource, @NotBlank @Size(max=64) String action) {}

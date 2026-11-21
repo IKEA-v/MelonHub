@@ -1,0 +1,173 @@
+openapi: 3.1.0
+info:
+  title: MelonHub Unified Identity API
+  version: 1.0.0
+  description: 供课程项目管理系统联调使用的统一身份与权限接口。
+servers:
+  - url: https://identity.example.edu
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      security: []
+      summary: 登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200': { description: 登录成功, content: { application/json: { schema: { $ref: '#/components/schemas/LoginVO' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      summary: 退出登录
+      responses:
+        '204': { description: 已退出 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/me:
+    get:
+      summary: 当前用户、角色与权限
+      responses:
+        '200': { description: 当前身份, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityCurrentUserVO' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/permissions/{permission}:
+    get:
+      summary: 校验前端权限
+      parameters:
+        - { name: permission, in: path, required: true, schema: { type: string, minLength: 1 } }
+      responses:
+        '200': { description: 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/Allowed' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/api-permissions/{operationId}:
+    get:
+      summary: 校验 API 全局权限
+      parameters:
+        - { name: operationId, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+      responses:
+        '200': { description: 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/ApiAllowed' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: operationId 不存在 }
+  /auth/departments:
+    get:
+      summary: 查询部门
+      parameters:
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: parentId, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: 部门分页结果, content: { application/json: { schema: { $ref: '#/components/schemas/PageDepartment' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/departments/{departmentId}/users:
+    get:
+      summary: 查询部门用户
+      parameters:
+        - { name: departmentId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: keyword, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: 用户分页结果, content: { application/json: { schema: { $ref: '#/components/schemas/PageUser' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 部门不存在 }
+  /auth/users/{userId}:
+    get:
+      summary: 查询统一身份用户
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: 用户资料, content: { application/json: { schema: { $ref: '#/components/schemas/IdentityUser' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 用户不存在 }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    Unauthorized:
+      description: 未登录或令牌失效
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+    LoginInput:
+      type: object
+      required: [username, password, systems]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 128 }
+        password: { type: string, format: password, minLength: 1, maxLength: 256, writeOnly: true }
+        systems: { type: array, minItems: 1, uniqueItems: true, items: { type: string, minLength: 1 } }
+    LoginVO:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, minimum: 1 }
+    IdentityCurrentUserVO:
+      type: object
+      required: [subject, roles, permissions]
+      properties:
+        subject: { type: string }
+        roles: { type: array, items: { type: string } }
+        permissions: { type: array, items: { type: string } }
+        name: { type: string }
+        no: { type: string }
+    Allowed:
+      type: object
+      required: [allowed]
+      properties: { allowed: { type: boolean } }
+    ApiAllowed:
+      type: object
+      required: [operationId, allowed]
+      properties:
+        operationId: { type: string }
+        allowed: { type: boolean }
+    Department:
+      type: object
+      required: [id, code, name, hasChildren]
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        parentId: { type: [integer, 'null'] }
+        hasChildren: { type: boolean }
+    DepartmentUser:
+      type: object
+      required: [userId, no, name, departmentId, departmentName]
+      properties:
+        userId: { type: string }
+        no: { type: string }
+        name: { type: string }
+        departmentId: { type: integer }
+        departmentName: { type: string }
+    PageDepartment:
+      type: object
+      required: [page, pageSize, total, items]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/Department' } }
+    PageUser:
+      type: object
+      required: [page, pageSize, total, items]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/DepartmentUser' } }
+    IdentityUser:
+      type: object
+      required: [userId, no, name]
+      properties:
+        userId: { type: string }
+        no: { type: string }
+        name: { type: string }

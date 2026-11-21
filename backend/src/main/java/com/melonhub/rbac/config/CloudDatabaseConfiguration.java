@@ -26,7 +26,13 @@ public class CloudDatabaseConfiguration {
                 String url = env.getRequiredProperty("spring.datasource.url");
                 if (!url.startsWith("jdbc:mysql://")) throw new IllegalArgumentException();
                 URI uri = URI.create(url.substring(5));
-                if (!host.equalsIgnoreCase(uri.getHost())
+                String jdbcHost = uri.getHost();
+                if (jdbcHost == null) {
+                    String authority = uri.getRawAuthority();
+                    int colon = authority == null ? -1 : authority.lastIndexOf(':');
+                    jdbcHost = colon > 0 ? authority.substring(0, colon) : authority;
+                }
+                if (!host.equalsIgnoreCase(jdbcHost)
                         || (uri.getPort() == -1 ? 3306 : uri.getPort()) != Integer.parseInt(env.getProperty(prefix + "PORT", "3306"))
                         || !uri.getRawPath().equals("/" + database) || uri.getRawUserInfo() != null || uri.getRawFragment() != null) throw new IllegalArgumentException();
                 var options = Arrays.stream(uri.getRawQuery().split("&")).map(option -> option.split("=", 2)).toList();

@@ -3,6 +3,8 @@ export class ApiError extends Error {
 }
 
 const TOKEN = 'melonhub-token'
+const configuredApiBase = typeof import.meta.env === 'undefined' ? undefined : import.meta.env.VITE_API_BASE_URL
+const API_BASE = (configuredApiBase || '/api').replace(/\/$/, '')
 export const session = {
   token: () => sessionStorage.getItem(TOKEN),
   save: (token: string) => sessionStorage.setItem(TOKEN, token),
@@ -32,7 +34,7 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   if (token) headers.Authorization = `Bearer ${token}`
   let response: Response
   try {
-    response = await fetch(`/api${path}`, { ...options, headers: { ...headers, ...(options.headers as Record<string, string> | undefined) } })
+    response = await fetch(`${API_BASE}${path}`, { ...options, headers: { ...headers, ...(options.headers as Record<string, string> | undefined) } })
   } catch {
     throw new ApiError(0, 'NETWORK_ERROR', fallbackMessage(0, null))
   }

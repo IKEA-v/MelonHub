@@ -23,10 +23,13 @@
 
 - **[项目使用说明书](doc/使用说明书.md)**：启停、控制台各页面、从零建立授权链、常见问题。
 - [本地 Docker 运行说明](doc/本地Docker运行.md)：MySQL 与 Redis 容器、`.env` 配置、排查。
+- [Docker Swarm 部署](deploy/README.md)：服务器镜像构建、Stack 配置和联调端口。
 - [接口说明](doc/API.md)：业务 API、Webhook、管理 API、错误码、限流和监控。
 - [架构说明](doc/ARCHITECTURE.md)：权限模型、缓存失效协议、授权治理、高峰保护、信任边界。
 - [验证记录](doc/验证记录.md)：测试、端到端、双实例、浏览器检查以及历史压测与故障演练结果。
 - [Java SDK 说明](sdk/java/README.md)：业务后端接入客户端、Spring Boot 注解与 Webhook 验签。
+- [统一身份联调说明](doc/统一身份联调.md)：课程管理系统 8 个统一身份接口、CORS、联调用户和权限初始化。
+- [第二轮检查问题与回答](doc/第二轮检查问题与回答.md)：助教/教师检查准备、结构化设计、DDD 和 GRASP 问答。
 
 ## 快速使用
 
@@ -79,7 +82,7 @@ Invoke-RestMethod http://127.0.0.1:8080/api/health
 | `backend/.../cache` | Redis 权限缓存与失效协议 |
 | `backend/.../security` | 统一鉴权、全局与实例内限流、TOTP、管理员权限、凭据生成与哈希 |
 | `backend/.../dto`、`exception`、`config` | 请求校验、统一错误、数据库目标保护与 Redis 配置 |
-| `backend/src/main/resources/db/migration` | Flyway 迁移 V1–V5 |
+| `backend/src/main/resources/db/migration` | Flyway 迁移 V1–V7、旧库兼容迁移 V8，以及管理员与统一身份迁移 V9–V11 |
 | `frontend/src` | 控制台页面、共享组件、主题、状态与请求封装 |
 | `sdk/java` | Java 业务侧 SDK（独立 Maven 工程） |
 | `scripts` | 一键启停、Redis 容器管理、测试与云端检查 |

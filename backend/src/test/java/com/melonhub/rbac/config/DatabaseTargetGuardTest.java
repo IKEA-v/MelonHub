@@ -37,6 +37,13 @@ class DatabaseTargetGuardTest {
         assertThatThrownBy(() -> validate(env)).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test void cloudProfileAcceptsSwarmServiceNamesWithUnderscores() {
+        var env = local().withProperty("CLOUD_DB_HOST", "lab_mysql")
+                .withProperty("spring.datasource.url", "jdbc:mysql://lab_mysql:3306/melonhub_rbac?sslMode=REQUIRED");
+        env.setActiveProfiles("cloud");
+        assertThatCode(() -> validate(env)).doesNotThrowAnyException();
+    }
+
     @Test void localProfileCannotBeRedirectedToARemoteHost() {
         var env = local().withProperty("LOCAL_DB_HOST", "db.example")
                 .withProperty("spring.datasource.url", "jdbc:mysql://db.example:3306/melonhub_rbac?sslMode=REQUIRED");

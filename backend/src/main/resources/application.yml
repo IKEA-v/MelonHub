@@ -62,7 +62,7 @@ spring:
 management:
   server:
     port: ${MANAGEMENT_PORT:8081}
-    address: 127.0.0.1
+    address: ${MANAGEMENT_ADDRESS:127.0.0.1}
   endpoints:
     web:
       exposure:
@@ -100,6 +100,12 @@ melonhub:
   retention:
     audit-days: ${AUDIT_RETENTION_DAYS:180}
     webhook-days: ${WEBHOOK_RETENTION_DAYS:30}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+  identity:
+    jwt-secret: ${IDENTITY_JWT_SECRET:local-only-change-this-identity-secret-32}
+    issuer: ${IDENTITY_JWT_ISSUER:https://identity.example.edu}
+    expires-seconds: ${IDENTITY_JWT_EXPIRES_SECONDS:7200}
 logging:
   pattern:
     level: "%5p [%X{requestId:-}]"
