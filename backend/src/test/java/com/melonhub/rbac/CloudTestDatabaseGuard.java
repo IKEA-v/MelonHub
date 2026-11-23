@@ -20,7 +20,7 @@ public class CloudTestDatabaseGuard implements ApplicationContextInitializer<Con
             if (env.getProperty(key, "").isBlank()) throw new IllegalStateException(key + " must be configured for integration tests");
         }
     }
-    static void validate(String url, String cloudHost, String cloudPort) {
+    public static void validate(String url, String cloudHost, String cloudPort) {
         try {
             if (!url.startsWith("jdbc:mysql://")) throw new IllegalArgumentException();
             URI uri = URI.create(url.substring(5));

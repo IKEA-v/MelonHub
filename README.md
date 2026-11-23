@@ -21,6 +21,8 @@
 
 ## 文档
 
+- **[业务术语表](CONTEXT.md)**：MelonHub 领域与平台核心术语及边界定义。
+- **[需求文档（R1–R32）](doc/requirements.md)**：按现行代码整理的完整功能/非功能需求、验收标准、全量测试逐方法对照表及历史演进裁决。
 - **[项目使用说明书](doc/使用说明书.md)**：启停、控制台各页面、从零建立授权链、常见问题。
 - [本地 Docker 运行说明](doc/本地Docker运行.md)：MySQL 与 Redis 容器、`.env` 配置、排查。
 - [Docker Swarm 部署](deploy/README.md)：服务器镜像构建、Stack 配置和联调端口。

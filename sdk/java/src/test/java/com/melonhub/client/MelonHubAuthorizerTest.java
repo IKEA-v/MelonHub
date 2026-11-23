@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -15,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/** 对应需求：R27（见 doc/requirements.md）。 */
 class MelonHubAuthorizerTest {
 
     private StubServer stub;
@@ -49,6 +51,7 @@ class MelonHubAuthorizerTest {
     }
 
     @Test
+    @DisplayName("R27 SDK Authorizer 跨调用复用本地上下文令牌缓存")
     void cachesTokenAcrossCalls() {
         allowChecks();
         assertThat(authorizer.hasPermission("u1", 1L, "item:read")).isTrue();
@@ -58,6 +61,7 @@ class MelonHubAuthorizerTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 遇 CONTEXT_INVALID 自动无切部门重建上下文一次")
     void rebuildsContextOnceOnContextInvalidWithoutSwitching() {
         List<String> bodies = new CopyOnWriteArrayList<>();
         stub.on("POST", "/api/v1/contexts", (ex, body) -> {
@@ -79,6 +83,7 @@ class MelonHubAuthorizerTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 常规鉴权校验绝不隐式切换用户当前部门")
     void normalChecksNeverMoveTheCurrentDepartment() {
         allowChecks();
         stub.on("POST", "/api/v1/contexts", (ex, body) -> {
@@ -98,6 +103,7 @@ class MelonHubAuthorizerTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 显式切换部门自动清理其他部门缓存上下文")
     void switchingDropsCachedContextsOfOtherDepartments() {
         allowChecks();
         authorizer.hasPermission("u1", 1L, "item:read");
@@ -110,6 +116,7 @@ class MelonHubAuthorizerTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 重建上下文失败保持 Fail-Closed 默认拒绝")
     void failureWhileRebuildingStaysFailClosed() {
         stub.on("POST", "/api/v1/contexts", (ex, body) -> issues.incrementAndGet() == 1
                 ? StubServer.Response.json(200, "{\"contextToken\":\"tok1\",\"expiresAt\":\"" + futureExpiry() + "\"}")
@@ -121,18 +128,21 @@ class MelonHubAuthorizerTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 服务端 5xx 错误保持 Fail-Closed 拒绝")
     void failClosedOnServerError() {
         stub.on("POST", "/api/v1/contexts", (ex, body) -> StubServer.Response.json(500, "{\"code\":\"INTERNAL\",\"message\":\"boom\"}"));
         assertThat(authorizer.hasPermission("u1", 1L, "item:read")).isFalse();
     }
 
     @Test
+    @DisplayName("R27 SDK 网络异常保持 Fail-Closed 拒绝")
     void failClosedOnNetworkError() {
         stub.close();
         assertThat(authorizer.hasPermission("u1", 1L, "item:read")).isFalse();
     }
 
     @Test
+    @DisplayName("R27 SDK 收到用户级 Webhook 精准驱逐缓存上下文")
     void webhookEvictsCachedContext() throws IOException {
         allowChecks();
         authorizer.hasPermission("u1", 1L, "item:read");
@@ -149,6 +159,7 @@ class MelonHubAuthorizerTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 收到域或软件级 Webhook 驱逐受影响缓存")
     void domainAndApplicationEventsEvictTheAffectedContexts() {
         authorizer.token("u1", 1L);
         authorizer.token("u2", 1L);
@@ -167,6 +178,7 @@ class MelonHubAuthorizerTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 支持单用户与全量主动缓存驱逐")
     void evictAndEvictAll() {
         allowChecks();
         authorizer.hasPermission("u1", 1L, "item:read");

@@ -7,7 +7,8 @@ const source = await readFile(new URL('../src/api.ts', import.meta.url), 'utf8')
 const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } })
 const { api, session } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
 
-test('a late 401 from the old token leaves the new session signed in', async () => {
+// 对应需求：R26（见 doc/requirements.md）
+test('R26: a late 401 from the old token leaves the new session signed in', async () => {
   const storage = new Map()
   globalThis.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }
   let expired = 0
