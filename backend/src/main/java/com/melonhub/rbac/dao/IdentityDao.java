@@ -6,9 +6,13 @@ import com.melonhub.rbac.entity.User;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Tuple;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Repository;
@@ -36,6 +40,9 @@ public class IdentityDao {
     /** 部门用户行。 */
     public record DepartmentUserRow(String userId, String no, String name, long departmentId, String departmentName) {
     }
+
+    private static final List<String> COURSE_AUDIT_TYPES =
+            List.of("score_changed", "group_changed", "milestone_changed", "roster_changed");
 
     private final EntityManager entityManager;
 
@@ -149,6 +156,65 @@ public class IdentityDao {
                 .setParameter("userId", userId)
                 .setParameter("applicationCode", applicationCode)
                 .getResultList();
+    }
+
+    /** 读取有效查看权限所在的部门，避免把单部门授权用于整个软件。 */
+    public List<Long> permissionDepartments(long userId, String applicationCode, String permission) {
+        return entityManager.createQuery("""
+                select distinct ur.departmentId from UserRole ur join ur.role r join r.application a,
+                    RolePermission rp join rp.permission p
+                where ur.user.id = :userId and a.code = :applicationCode and a.enabled = true
+                  and rp.role = r and r.enabled = true and p.application.id = a.id
+                  and p.department.id = ur.departmentId and p.code = :permission
+                  and (ur.expiresAt is null or ur.expiresAt > current_timestamp)
+                """, Long.class)
+                .setParameter("userId", userId)
+                .setParameter("applicationCode", applicationCode)
+                .setParameter("permission", permission)
+                .getResultList();
+    }
+
+    /** 在授权部门内查询课程业务事件及操作人的资料。 */
+    public RbacDao.Page courseAuditEvents(String applicationCode, List<Long> departments, String actor, Long actorId,
+                                        String target, Instant from, Instant to, int page, int pageSize) {
+        Jpql.Where where = new Jpql.Where()
+                .and("a.code = ?", applicationCode)
+                .in("e.departmentId", departments)
+                .in("e.action", COURSE_AUDIT_TYPES);
+        if (actor != null && !actor.isBlank()) {
+            String pattern = Jpql.like(actor.strip());
+            where.and("(e.actor like ? escape '!' or u.name like ? escape '!')", pattern, pattern);
+        }
+        if (actorId != null) where.and("u.id = ?", actorId);
+        if (target != null && !target.isBlank()) where.and("e.target like ? escape '!'", Jpql.like(target.strip()));
+        if (from != null) where.and("e.createdAt >= ?", from);
+        if (to != null) where.and("e.createdAt <= ?", to);
+        return Jpql.page(entityManager, """
+                select e.id as id, e.createdAt as at, e.action as type, e.target as target, e.actor as actorNo,
+                       u.id as actorId, u.name as actorName
+                """, "from AuditEvent e join e.application a left join User u on u.externalId = e.actor",
+                where, "e.createdAt desc, e.id desc", page, pageSize);
+    }
+
+    /** 批量读取当前角色，限制在查询者有权查看的部门。 */
+    public Map<Long, List<String>> auditActorRoles(Collection<Long> userIds, String applicationCode, List<Long> departments) {
+        if (userIds.isEmpty()) return Map.of();
+        Map<Long, List<String>> result = new HashMap<>();
+        List<Tuple> rows = entityManager.createQuery("""
+                select distinct ur.user.id as userId, r.code as code from UserRole ur join ur.role r join r.application a
+                where ur.user.id in :userIds and a.code = :applicationCode and a.enabled = true and r.enabled = true
+                  and ur.departmentId in :departments and (ur.expiresAt is null or ur.expiresAt > current_timestamp)
+                order by r.code
+                """, Tuple.class)
+                .setParameter("userIds", userIds)
+                .setParameter("applicationCode", applicationCode)
+                .setParameter("departments", departments)
+                .getResultList();
+        for (Tuple row : rows) {
+            result.computeIfAbsent(row.get("userId", Long.class), ignored -> new ArrayList<>())
+                    .add(row.get("code", String.class).toLowerCase(Locale.ROOT));
+        }
+        return result;
     }
 
     /**

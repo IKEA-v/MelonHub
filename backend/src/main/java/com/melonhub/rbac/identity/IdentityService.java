@@ -1,6 +1,7 @@
 package com.melonhub.rbac.identity;
 
 import com.melonhub.rbac.dao.IdentityDao;
+import com.melonhub.rbac.dao.RbacDao;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.exception.ApiException;
 import com.melonhub.rbac.security.AdminFunction;
@@ -8,13 +9,16 @@ import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.Credentials;
 import com.melonhub.rbac.service.RbacService;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class IdentityService {
 
     private static final String COURSE_SYSTEM = "course-project-management";
+    private static final String COURSE_AUDIT_VIEW = "AV";
     private static final Map<String, String> API_PERMISSION_CODES = Map.ofEntries(
             Map.entry("listTerms", "CV"),
             Map.entry("createTerm", "TC"),
@@ -47,7 +52,8 @@ public class IdentityService {
             Map.entry("createTeacher", "TEC"),
             Map.entry("updateTeacher", "TEE"),
             Map.entry("deleteTeacher", "TED"),
-            Map.entry("queryAuditLogs", "AV")
+            Map.entry("queryAuditLogs", COURSE_AUDIT_VIEW),
+            Map.entry("listAuditLogs", COURSE_AUDIT_VIEW)
     );
 
     private final IdentityDao identityDao;
@@ -104,6 +110,36 @@ public class IdentityService {
         response.put("tokenType", "Bearer");
         response.put("expiresIn", claims.expiresAt().getEpochSecond() - issuedAt.getEpochSecond());
         return response;
+    }
+
+    /** 查询当前课程账号具有 AV 权限的部门内的业务日志。 */
+    @Transactional(readOnly = true)
+    public Map<String, Object> auditLogs(String authorization, String actor, Long actorId, String target,
+                                        OffsetDateTime from, OffsetDateTime to, int page, int pageSize) {
+        IdentityDao.UserRow user = authenticatedUser(authorization);
+        List<Long> departments = identityDao.permissionDepartments(user.id(), COURSE_SYSTEM, COURSE_AUDIT_VIEW);
+        if (departments.isEmpty()) {
+            throw ApiException.forbidden("你没有查看课程日志的权限。");
+        }
+        RbacDao.Page events = identityDao.courseAuditEvents(COURSE_SYSTEM, departments, actor, actorId, target,
+                from == null ? null : from.toInstant(), to == null ? null : to.toInstant(), page, pageSize);
+        List<Long> actorIds = events.items().stream().map(row -> (Long) row.get("actorId"))
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, List<String>> roles = identityDao.auditActorRoles(actorIds, COURSE_SYSTEM, departments);
+        List<Map<String, Object>> items = events.items().stream().map(row -> auditItem(row, roles)).toList();
+        return page(page, pageSize, events.total(), items);
+    }
+
+    /** 使用已有的操作人资料，并为已删除或无法关联的标识保留历史显示。 */
+    private static Map<String, Object> auditItem(Map<String, Object> row, Map<Long, List<String>> roles) {
+        Long id = (Long) row.get("actorId");
+        Map<String, Object> actor = new LinkedHashMap<>();
+        actor.put("id", id);
+        actor.put("name", id == null ? row.get("actorNo") : row.get("actorName"));
+        actor.put("roles", id == null ? List.of() : roles.getOrDefault(id, List.of()));
+        actor.put("deleted", id == null);
+        return Map.of("id", row.get("id"), "at", ((Timestamp) row.get("at")).toInstant().toString(),
+                "actor", actor, "type", row.get("type"), "target", row.get("target"));
     }
 
     /**

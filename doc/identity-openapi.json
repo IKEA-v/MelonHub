@@ -125,6 +125,129 @@
         }
       }
     },
+    "/auth/audit-logs": {
+      "get": {
+        "operationId": "queryIdentityAuditLogs",
+        "tags": [
+          "统一身份与权限"
+        ],
+        "summary": "查询课程业务日志",
+        "description": "需要课程系统权限 AV。按授权部门查询已入库的课程业务事件，按时间从新到旧返回。",
+        "parameters": [
+          {
+            "name": "actor",
+            "in": "query",
+            "description": "操作人姓名或工号",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "in": "query",
+            "description": "已关联操作人的用户主键",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "description": "操作对象",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "起始时间（含）",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "结束时间（含）",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "课程业务日志分页结果",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "page",
+                    "pageSize",
+                    "total",
+                    "items"
+                  ],
+                  "properties": {
+                    "page": {
+                      "type": "integer"
+                    },
+                    "pageSize": {
+                      "type": "integer"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IdentityAuditLog"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
     "/auth/permissions/{permission}": {
       "get": {
         "operationId": "checkUiPermission",
@@ -576,6 +699,66 @@
       }
     },
     "schemas": {
+      "IdentityAuditLog": {
+        "type": "object",
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "type",
+          "target"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "roles",
+              "deleted"
+            ],
+            "properties": {
+              "id": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "deleted": {
+                "type": "boolean"
+              }
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "score_changed",
+              "group_changed",
+              "milestone_changed",
+              "roster_changed"
+            ]
+          },
+          "target": {
+            "type": "string"
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "required": [

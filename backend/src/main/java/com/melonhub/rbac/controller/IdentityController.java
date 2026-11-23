@@ -1,9 +1,12 @@
 package com.melonhub.rbac.controller;
 
 import com.melonhub.rbac.dto.Requests;
+import com.melonhub.rbac.exception.ApiException;
 import com.melonhub.rbac.identity.IdentityService;
 import jakarta.validation.Valid;
+import java.time.OffsetDateTime;
 import java.util.Map;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -64,6 +67,34 @@ public class IdentityController {
     @GetMapping("/me")
     public Map<String, Object> me(@RequestHeader(value = "Authorization", required = false) String authorization) {
         return identityService.currentUser(authorization);
+    }
+
+    /** 按操作人、对象和时间分页查询课程业务日志。 */
+    @GetMapping("/audit-logs")
+    public Map<String, Object> auditLogs(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(required = false) String actor,
+            @RequestParam(required = false) Long actorId,
+            @RequestParam(required = false) String target,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            OffsetDateTime from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            OffsetDateTime to,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        if (page < 1 || pageSize < 1 || pageSize > 100) {
+            throw ApiException.bad("页码须大于 0，页大小须在 1 到 100 之间。");
+        }
+        if (actorId != null && actorId < 1) {
+            throw ApiException.bad("操作人 ID 须大于 0。");
+        }
+        if (from != null && to != null && from.isAfter(to)) {
+            throw ApiException.bad("起始时间不能晚于结束时间。");
+        }
+        return identityService.auditLogs(authorization, actor, actorId, target, from, to, page, pageSize);
     }
 
     /**
