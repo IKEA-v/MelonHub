@@ -20,7 +20,7 @@ async function submit() {
     session.save(result.token)
     form.password = ''
     emit('signed-in', {
-      username: result.username, displayName: result.displayName, role: result.role, roleName: result.roleName, functions: result.functions,
+      id: result.id, username: result.username, displayName: result.displayName, role: result.role, roleName: result.roleName, functions: result.functions,
       root: result.root, kind: result.kind, allDepartments: result.allDepartments, departmentIds: result.departmentIds,
       allApplications: result.allApplications, applicationIds: result.applicationIds, mfaEnabled: result.mfaEnabled,
     })

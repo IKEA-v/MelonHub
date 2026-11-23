@@ -88,7 +88,7 @@ public class AuthService implements ApplicationRunner {
             log.info("Bootstrap super administrator account created");
         } else if (bootstrapReset) {
             dao.resetBootstrap(bootstrapUser, encode(bootstrapPassword), AdminPrincipal.SUPER_ADMIN);
-            dao.endSessions(bootstrapUser);
+            dao.account(bootstrapUser).ifPresent(account -> dao.endSessions(account.id()));
             log.warn("Bootstrap administrator restored from ADMIN_PASSWORD; set ADMIN_PASSWORD_RESET=false again");
         }
         dao.purgeSessions(idleMinutes, 100_000);
@@ -108,7 +108,7 @@ public class AuthService implements ApplicationRunner {
             throw locked();
         }
         if (!matches(input.password(), account.passwordHash())) {
-            boolean nowLocked = dao.recordFailure(username, maxFailures, lockMinutes);
+            boolean nowLocked = dao.recordFailure(account.id(), maxFailures, lockMinutes);
             rbac.audit(username, nowLocked ? "ACCOUNT_LOCKED" : "LOGIN_FAILED", username, null, null,
                     nowLocked ? "连续 " + maxFailures + " 次密码错误，锁定 " + lockMinutes + " 分钟" : "密码错误");
             throw nowLocked ? locked() : badCredentials();
@@ -124,8 +124,8 @@ public class AuthService implements ApplicationRunner {
             Long step = Totp.verify(account.mfaSecret(), code.strip());
             // A step counter stops replay of a code inside its 90 s acceptance window; the conditional update
             // decides between concurrent logins that present the same code.
-            if (step == null || step <= account.mfaLastStep() || dao.consumeMfaStep(username, account.mfaSecret(), step) == 0) {
-                boolean nowLocked = dao.recordFailure(username, maxFailures, lockMinutes);
+            if (step == null || step <= account.mfaLastStep() || dao.consumeMfaStep(account.id(), account.mfaSecret(), step) == 0) {
+                boolean nowLocked = dao.recordFailure(account.id(), maxFailures, lockMinutes);
                 rbac.audit(username, nowLocked ? "ACCOUNT_LOCKED" : "LOGIN_FAILED", username, null, null,
                         nowLocked ? "连续失败锁定" : "动态口令不正确或已使用");
                 throw new ApiException(HttpStatus.UNAUTHORIZED, "MFA_INVALID", "动态口令不正确或已使用");
@@ -136,13 +136,13 @@ public class AuthService implements ApplicationRunner {
             rbac.audit(username, "LOGIN_FAILED", username, null, null, "登录过程中账号凭据已变更");
             throw new ApiException(HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "账号凭据已变更，请重新登录");
         }
-        dao.recordSuccess(username);
+        dao.recordSuccess(account.id());
         rbac.audit(username, "LOGIN", username, null, null, "");
         var result = new LinkedHashMap<String,Object>();
         result.put("token", token);
         result.put("expiresIn", sessionSeconds);
         result.put("idleTimeout", idleMinutes * 60);
-        result.putAll(view(principal(account.username(), account.displayName(), account.role(), account.kind(), account.root(),
+        result.putAll(view(principal(account.id(), account.username(), account.displayName(), account.role(), account.kind(), account.root(),
                 account.allDepartments(), account.allApplications())));
         result.put("mfaEnabled", account.mfaSecret() != null);
         return result;
@@ -152,7 +152,7 @@ public class AuthService implements ApplicationRunner {
         String hash = sessionHash(authorization);
         var session = dao.session(hash, idleMinutes).orElseThrow(ApiException::unauthorized);
         if (session.stale()) dao.touchSession(hash);
-        return principal(session.username(), session.displayName(), session.role(), session.kind(), session.root(), session.allDepartments(),
+        return principal(session.id(), session.username(), session.displayName(), session.role(), session.kind(), session.root(), session.allDepartments(),
                 session.allApplications());
     }
 
@@ -169,22 +169,22 @@ public class AuthService implements ApplicationRunner {
     }
 
     @Transactional public void changePassword(AdminPrincipal principal, String authorization, Requests.PasswordChange input) {
-        var account = dao.account(principal.username()).orElseThrow(ApiException::unauthorized);
+        var account = dao.account(principal.id()).orElseThrow(ApiException::unauthorized);
         if (!matches(input.currentPassword(), account.passwordHash())) throw new ApiException(HttpStatus.BAD_REQUEST, "BAD_CREDENTIALS", "当前密码不正确");
         if (input.currentPassword().equals(input.newPassword())) throw ApiException.bad("新密码不能与当前密码相同");
-        if (dao.replacePassword(principal.username(), account.passwordHash(), encode(input.newPassword())) == 0)
+        if (dao.replacePassword(principal.id(), account.passwordHash(), encode(input.newPassword())) == 0)
             throw new ApiException(HttpStatus.BAD_REQUEST, "BAD_CREDENTIALS", "密码已被更改，请重新登录后再试");
-        dao.keepOnlySession(principal.username(), sessionHash(authorization));
+        dao.keepOnlySession(principal.id(), sessionHash(authorization));
         rbac.audit(principal.actor(), "PASSWORD_CHANGED", principal.username(), null, null, "其他会话已下线");
     }
 
     // ---- two-factor authentication (TOTP) ----
     /** Step 1: generates a pending secret. Nothing is active until confirmMfa proves possession. */
     public Map<String,Object> setupMfa(AdminPrincipal principal) {
-        var account = dao.account(principal.username()).orElseThrow(ApiException::unauthorized);
+        var account = dao.account(principal.id()).orElseThrow(ApiException::unauthorized);
         if (account.mfaSecret() != null) throw ApiException.conflict("已启用两步验证，请先停用再重新绑定");
         String secret = Totp.newSecret();
-        dao.setMfaPending(principal.username(), secret);
+        dao.setMfaPending(principal.id(), secret);
         String label = "MelonHub:" + principal.username();
         var result = new LinkedHashMap<String,Object>();
         result.put("secret", secret);
@@ -194,38 +194,39 @@ public class AuthService implements ApplicationRunner {
 
     /** Step 2: the first valid code activates the secret; that code is also marked as used. */
     @Transactional public void confirmMfa(AdminPrincipal principal, String code) {
-        var pending = dao.pendingMfaSecret(principal.username());
+        var pending = dao.pendingMfaSecret(principal.id());
         if (pending == null) throw ApiException.bad("请先生成绑定密钥");
         Long step = Totp.verify(pending, code);
         if (step == null) throw new ApiException(HttpStatus.BAD_REQUEST, "MFA_INVALID", "动态口令不正确，请确认设备时间准确");
-        if (dao.confirmMfa(principal.username(), pending, step) == 0) throw ApiException.conflict("绑定密钥已更换，请使用最新的二维码重新绑定");
-        dao.endSessions(principal.username());
+        if (dao.confirmMfa(principal.id(), pending, step) == 0) throw ApiException.conflict("绑定密钥已更换，请使用最新的二维码重新绑定");
+        dao.endSessions(principal.id());
         rbac.audit(principal.actor(), "MFA_ENABLED", principal.username(), null, null, "");
     }
 
     @Transactional public void disableMfa(AdminPrincipal principal, Requests.MfaDisable input) {
-        var account = dao.account(principal.username()).orElseThrow(ApiException::unauthorized);
+        var account = dao.account(principal.id()).orElseThrow(ApiException::unauthorized);
         if (account.mfaSecret() == null) throw ApiException.bad("未启用两步验证");
         if (!matches(input.password(), account.passwordHash()))
             throw new ApiException(HttpStatus.BAD_REQUEST, "BAD_CREDENTIALS", "当前密码不正确");
         Long step = Totp.verify(account.mfaSecret(), input.code());
-        if (step == null || step <= account.mfaLastStep() || dao.disableMfaWithStep(principal.username(), account.mfaSecret(), step) == 0)
+        if (step == null || step <= account.mfaLastStep() || dao.disableMfaWithStep(principal.id(), account.mfaSecret(), step) == 0)
             throw new ApiException(HttpStatus.BAD_REQUEST, "MFA_INVALID", "动态口令不正确或已使用");
-        dao.endSessions(principal.username());
+        dao.endSessions(principal.id());
         rbac.audit(principal.actor(), "MFA_DISABLED", principal.username(), null, null, "");
     }
 
     /** Super administrators clear a lost device; the account then signs in with password only until re-enrolled. */
-    @Transactional public void resetMfa(String username, AdminPrincipal actor) {
-        requireManaged(actor, username);
-        if (dao.disableMfa(username) == 0) throw ApiException.missing("管理员账号不存在");
-        dao.endSessions(username);
+    @Transactional public void resetMfa(long id, AdminPrincipal actor) {
+        dao.lockAccounts();
+        String username = requireManaged(actor, id).node(id).username();
+        if (dao.disableMfa(id) == 0) throw ApiException.missing("管理员账号不存在");
+        dao.endSessions(id);
         rbac.audit(actor.actor(), "MFA_RESET", username, null, null, "两步验证已重置");
     }
 
     public Map<String,Object> me(AdminPrincipal principal) {
         var view = new LinkedHashMap<>(view(principal));
-        view.put("mfaEnabled", dao.account(principal.username()).map(account -> account.mfaSecret() != null).orElse(false));
+        view.put("mfaEnabled", dao.account(principal.id()).map(account -> account.mfaSecret() != null).orElse(false));
         return view;
     }
     public ApplicationCaller application(String key) {
@@ -263,26 +264,26 @@ public class AuthService implements ApplicationRunner {
     /** The operator for an account as a new session would see it. */
     public AdminPrincipal principal(String username) {
         var account = dao.account(username).orElseThrow(() -> ApiException.missing("管理员账号不存在"));
-        return principal(account.username(), account.displayName(), account.role(), account.kind(), account.root(), account.allDepartments(),
+        return principal(account.id(), account.username(), account.displayName(), account.role(), account.kind(), account.root(), account.allDepartments(),
                 account.allApplications());
     }
 
     /** The accounts the operator manages, and its own; manageable tells which ones it may change. */
     public List<Map<String,Object>> accounts(AdminPrincipal actor) {
         var tree = tree();
-        var applications = new HashMap<String,List<Long>>();
+        var applications = new HashMap<Long,List<Long>>();
         for (var pair : dao.accountApplicationPairs())
-            applications.computeIfAbsent((String) pair.get("username"), k -> new ArrayList<>()).add(((Number) pair.get("application_id")).longValue());
-        var departments = new HashMap<String,List<Long>>();
+            applications.computeIfAbsent((Long) pair.get("accountId"), k -> new ArrayList<>()).add(((Number) pair.get("application_id")).longValue());
+        var departments = new HashMap<Long,List<Long>>();
         for (var pair : dao.accountDepartmentPairs())
-            departments.computeIfAbsent((String) pair.get("username"), k -> new ArrayList<>()).add(((Number) pair.get("department_id")).longValue());
+            departments.computeIfAbsent((Long) pair.get("accountId"), k -> new ArrayList<>()).add(((Number) pair.get("department_id")).longValue());
         var result = new ArrayList<Map<String,Object>>();
         for (var account : dao.accounts()) {
-            String username = (String) account.get("username");
-            boolean manageable = tree.manages(actor.username(), username);
-            if (!manageable && !username.equals(actor.username())) continue;
-            account.put("applicationIds", applications.getOrDefault(username, List.of()));
-            account.put("departmentIds", departments.getOrDefault(username, List.of()));
+            long id = (Long) account.get("id");
+            boolean manageable = tree.manages(actor.id(), id);
+            if (!manageable && id != actor.id()) continue;
+            account.put("applicationIds", applications.getOrDefault(id, List.of()));
+            account.put("departmentIds", departments.getOrDefault(id, List.of()));
             account.put("manageable", manageable);
             result.add(account);
         }
@@ -293,15 +294,16 @@ public class AuthService implements ApplicationRunner {
      * Creates an account below the operator, or below an account the operator manages. The new account must stay
      * within its parent (role functions, departments, applications); see AdminTree.
      */
-    @Transactional public void createAccount(Requests.Account input, AdminPrincipal actor) {
+    @Transactional public long createAccount(Requests.Account input, AdminPrincipal actor) {
         dao.lockAccounts();
         requireRole(input.role());
         var nodes = dao.nodes();
         var roleFunctions = roles.functionsByRole();
         var before = new AdminTree(nodes, roleFunctions);
-        String parent = input.parentUsername() == null ? actor.username() : input.parentUsername();
-        if (before.node(parent) == null) throw ApiException.bad("上级管理员不存在");
-        if (!parent.equals(actor.username()) && !before.manages(actor.username(), parent))
+        long parentId = requestedParent(input.parentId(), input.parentUsername(), actor.id());
+        var parent = before.node(parentId);
+        if (parent == null) throw ApiException.bad("上级管理员不存在");
+        if (parentId != actor.id() && !before.manages(actor.id(), parentId))
             throw ApiException.forbidden("只能在自己或自己管理的管理员下创建账号");
         String kind = input.kind() == null ? AdminPrincipal.MANAGER : input.kind();
         boolean allDepartments = everything(input.allDepartments(), input.departmentIds());
@@ -310,29 +312,31 @@ public class AuthService implements ApplicationRunner {
         var applications = allApplications ? List.<Long>of() : applications(input.applicationIds());
         requireSoftwareRoleScope(input.role(), kind, allDepartments, allApplications, applications);
         boolean enabled = !Boolean.FALSE.equals(input.enabled());
-        requireConsistent(with(nodes, new AuthDao.AccountNode(input.username(), parent, kind, input.role(), enabled, allDepartments,
+        requireConsistent(with(nodes, new AuthDao.AccountNode(0, input.username(), parentId, kind, input.role(), enabled, allDepartments,
                 Set.copyOf(departments), allApplications, Set.copyOf(applications))), roleFunctions);
         String displayName = blankTo(input.displayName(), input.username());
-        dao.createAccount(input.username(), displayName, input.role(), encode(input.password()), enabled, parent, kind, allDepartments, allApplications);
-        dao.replaceAccountApplications(input.username(), applications);
-        dao.replaceAccountDepartments(input.username(), departments);
+        long id = dao.createAccount(input.username(), displayName, input.role(), encode(input.password()), enabled, parentId, kind, allDepartments, allApplications);
+        dao.replaceAccountApplications(id, applications);
+        dao.replaceAccountDepartments(id, departments);
         rbac.audit(actor.actor(), "ACCOUNT_CREATED", input.username(), null, null,
-                "角色 " + input.role() + "，上级 " + parent + kindDetail(kind) + scopeDetail(allDepartments, departments, allApplications, applications));
+                "角色 " + input.role() + "，上级 " + parent.username() + kindDetail(kind) + scopeDetail(allDepartments, departments, allApplications, applications));
+        return id;
     }
 
     /**
      * Changes an account the operator manages. Operators may only rename themselves: their own role, kind, scope and
      * parent are decided above them. Omitted scopes and parent stay as they are.
      */
-    @Transactional public void updateAccount(String username, Requests.AccountUpdate input, AdminPrincipal actor) {
+    @Transactional public void updateAccount(long id, Requests.AccountUpdate input, AdminPrincipal actor) {
         dao.lockAccounts();
         var nodes = dao.nodes();
         var roleFunctions = roles.functionsByRole();
         var before = new AdminTree(nodes, roleFunctions);
-        var current = before.node(username);
+        var current = before.node(id);
         if (current == null) throw ApiException.missing("管理员账号不存在");
-        boolean self = username.equals(actor.username());
-        if (!self && !before.manages(actor.username(), username)) throw ApiException.forbidden("只能管理自己下级的管理员账号");
+        String username = current.username();
+        boolean self = id == actor.id();
+        if (!self && !before.manages(actor.id(), id)) throw ApiException.forbidden("只能管理自己下级的管理员账号");
         requireRole(input.role());
         String kind = input.kind() == null ? current.kind() : input.kind();
         boolean keepDepartments = input.allDepartments() == null && input.departmentIds() == null;
@@ -341,12 +345,12 @@ public class AuthService implements ApplicationRunner {
         boolean keepApplications = input.allApplications() == null && input.applicationIds() == null;
         boolean allApplications = keepApplications ? current.allApplications() : everything(input.allApplications(), input.applicationIds());
         var applications = allApplications ? List.<Long>of() : keepApplications ? List.copyOf(current.applications()) : applications(input.applicationIds());
-        String parent = input.parentUsername() == null ? current.parent() : input.parentUsername();
+        Long parentId = requestedParent(input.parentId(), input.parentUsername(), current.parentId());
 
         boolean roleChanged = !current.role().equals(input.role());
         boolean disabling = current.enabled() && !input.enabled();
         boolean kindChanged = !current.kind().equals(kind);
-        boolean parentChanged = !Objects.equals(current.parent(), parent);
+        boolean parentChanged = !Objects.equals(current.parentId(), parentId);
         boolean scopeChanged = current.allDepartments() != allDepartments || !current.departments().equals(Set.copyOf(departments))
                 || current.allApplications() != allApplications || !current.applications().equals(Set.copyOf(applications));
         if (self && (roleChanged || disabling || kindChanged || parentChanged || scopeChanged))
@@ -355,22 +359,22 @@ public class AuthService implements ApplicationRunner {
             requireSoftwareRoleScope(input.role(), kind, allDepartments, allApplications, applications);
         if ((roleChanged || disabling) && current.enabled() && AdminPrincipal.SUPER_ADMIN.equals(current.role()) && enabledSuperAdmins(before) <= 1)
             throw ApiException.conflict("至少需要保留一个启用的超级管理员");
-        if (disabling && !before.children(username).isEmpty())
-            throw ApiException.conflict("该管理员还有 " + before.children(username).size() + " 个下级管理员，请先移交或删除下级后再停用");
+        if (disabling && !before.children(id).isEmpty())
+            throw ApiException.conflict("该管理员还有 " + before.children(id).size() + " 个下级管理员，请先移交或删除下级后再停用");
         if (parentChanged) {
-            if (parent == null || before.node(parent) == null) throw ApiException.bad("上级管理员不存在");
-            if (!parent.equals(actor.username()) && !before.manages(actor.username(), parent))
+            if (parentId == null || before.node(parentId) == null) throw ApiException.bad("上级管理员不存在");
+            if (parentId != actor.id() && !before.manages(actor.id(), parentId))
                 throw ApiException.forbidden("只能移到自己或自己管理的管理员之下");
         }
-        requireConsistent(with(nodes, new AuthDao.AccountNode(username, parent, kind, input.role(), input.enabled(), allDepartments,
+        requireConsistent(with(nodes, new AuthDao.AccountNode(id, username, parentId, kind, input.role(), input.enabled(), allDepartments,
                 Set.copyOf(departments), allApplications, Set.copyOf(applications))), roleFunctions);
-        dao.updateAccount(username, blankTo(input.displayName(), username), input.role(), input.enabled(), kind, allDepartments, allApplications);
-        dao.replaceAccountApplications(username, applications);
-        dao.replaceAccountDepartments(username, departments);
-        if (parentChanged) dao.moveUnder(username, parent);
-        if (roleChanged || disabling || kindChanged) dao.endSessions(username);
+        dao.updateAccount(id, blankTo(input.displayName(), username), input.role(), input.enabled(), kind, allDepartments, allApplications);
+        dao.replaceAccountApplications(id, applications);
+        dao.replaceAccountDepartments(id, departments);
+        if (parentChanged) dao.moveUnder(id, parentId);
+        if (roleChanged || disabling || kindChanged) dao.endSessions(id);
         rbac.audit(actor.actor(), "ACCOUNT_UPDATED", username, null, null,
-                "角色 " + input.role() + (input.enabled() ? "，启用" : "，停用") + (parentChanged ? "，上级改为 " + parent : "") + kindDetail(kind)
+                "角色 " + input.role() + (input.enabled() ? "，启用" : "，停用") + (parentChanged ? "，上级改为 " + before.node(parentId).username() : "") + kindDetail(kind)
                         + scopeDetail(allDepartments, departments, allApplications, applications));
     }
 
@@ -383,30 +387,32 @@ public class AuthService implements ApplicationRunner {
         }
     }
 
-    @Transactional public void resetPassword(String username, Requests.PasswordReset input, AdminPrincipal actor) {
-        requireManaged(actor, username);
-        if (dao.updatePassword(username, encode(input.password())) == 0) throw ApiException.missing("管理员账号不存在");
-        dao.endSessions(username);
+    @Transactional public void resetPassword(long id, Requests.PasswordReset input, AdminPrincipal actor) {
+        dao.lockAccounts();
+        String username = requireManaged(actor, id).node(id).username();
+        if (dao.updatePassword(id, encode(input.password())) == 0) throw ApiException.missing("管理员账号不存在");
+        dao.endSessions(id);
         rbac.audit(actor.actor(), "ACCOUNT_PASSWORD_RESET", username, null, null, "该账号全部会话已下线");
     }
 
-    @Transactional public void unlock(String username, AdminPrincipal actor) {
-        requireManaged(actor, username);
-        if (dao.unlock(username) == 0) throw ApiException.missing("管理员账号不存在");
+    @Transactional public void unlock(long id, AdminPrincipal actor) {
+        dao.lockAccounts();
+        String username = requireManaged(actor, id).node(id).username();
+        if (dao.unlock(id) == 0) throw ApiException.missing("管理员账号不存在");
         rbac.audit(actor.actor(), "ACCOUNT_UNLOCKED", username, null, null, "");
     }
 
-    @Transactional public void deleteAccount(String username, AdminPrincipal actor) {
-        if (username.equals(actor.username())) throw ApiException.bad("不能删除当前登录的账号");
+    @Transactional public void deleteAccount(long id, AdminPrincipal actor) {
+        if (id == actor.id()) throw ApiException.bad("不能删除当前登录的账号");
         dao.lockAccounts();
-        var tree = requireManaged(actor, username);
-        if (!tree.children(username).isEmpty())
-            throw ApiException.conflict("该管理员还有 " + tree.children(username).size() + " 个下级管理员，请先移交或删除下级");
-        var account = tree.node(username);
+        var tree = requireManaged(actor, id);
+        if (!tree.children(id).isEmpty())
+            throw ApiException.conflict("该管理员还有 " + tree.children(id).size() + " 个下级管理员，请先移交或删除下级");
+        var account = tree.node(id);
         if (account.enabled() && AdminPrincipal.SUPER_ADMIN.equals(account.role()) && enabledSuperAdmins(tree) <= 1)
             throw ApiException.conflict("至少需要保留一个启用的超级管理员");
-        if (dao.deleteAccount(username) == 0) throw ApiException.missing("管理员账号不存在");
-        rbac.audit(actor.actor(), "ACCOUNT_DELETED", username, null, null, "");
+        if (dao.deleteAccount(id) == 0) throw ApiException.missing("管理员账号不存在");
+        rbac.audit(actor.actor(), "ACCOUNT_DELETED", account.username(), null, null, "");
     }
 
     /** Takes the administrator tree lock; role changes call this before changing what accounts may do. */
@@ -427,24 +433,32 @@ public class AuthService implements ApplicationRunner {
     /** The accounts with one of them added or replaced. */
     private static List<AuthDao.AccountNode> with(List<AuthDao.AccountNode> nodes, AuthDao.AccountNode changed) {
         var result = new ArrayList<AuthDao.AccountNode>();
-        for (var node : nodes) if (!node.username().equals(changed.username())) result.add(node);
+        for (var node : nodes) if (node.id() != changed.id()) result.add(node);
         result.add(changed);
         return result;
     }
 
     private AdminTree tree() { return new AdminTree(dao.nodes(), roles.functionsByRole()); }
-    private AdminTree requireManaged(AdminPrincipal actor, String username) {
+    private AdminTree requireManaged(AdminPrincipal actor, long id) {
         var tree = tree();
-        if (tree.node(username) == null) throw ApiException.missing("管理员账号不存在");
-        if (!tree.manages(actor.username(), username)) throw ApiException.forbidden("只能管理自己下级的管理员账号");
+        if (tree.node(id) == null) throw ApiException.missing("管理员账号不存在");
+        if (!tree.manages(actor.id(), id)) throw ApiException.forbidden("只能管理自己下级的管理员账号");
         return tree;
     }
+    private Long requestedParent(Long requestedId, String requestedUsername, Long fallback) {
+        if (requestedId != null) return requestedId;
+        if (requestedUsername == null) return fallback;
+        return dao.account(requestedUsername).map(AuthDao.AccountRow::id)
+                .orElseThrow(() -> ApiException.bad("上级管理员不存在"));
+    }
+
     private static long enabledSuperAdmins(AdminTree tree) {
         return tree.accounts().stream().filter(a -> a.enabled() && AdminPrincipal.SUPER_ADMIN.equals(a.role())).count();
     }
 
     public static Map<String,Object> view(AdminPrincipal principal) {
         var view = new LinkedHashMap<String,Object>();
+        view.put("id", principal.id());
         view.put("username", principal.username());
         view.put("displayName", principal.displayName());
         view.put("role", principal.role());
@@ -460,14 +474,14 @@ public class AuthService implements ApplicationRunner {
     }
 
     /** The operator with the functions its role grants now; a role change takes effect on the next request. */
-    private AdminPrincipal principal(String username, String displayName, String role, String kind, boolean root, boolean allDepartments,
+    private AdminPrincipal principal(long id, String username, String displayName, String role, String kind, boolean root, boolean allDepartments,
                                      boolean allApplications) {
         var granted = roles.role(role).orElseThrow(ApiException::unauthorized);
         var functions = EnumSet.noneOf(AdminFunction.class);
         granted.functions().stream().map(AdminFunction::of).filter(Objects::nonNull).forEach(functions::add);
-        Set<Long> departments = allDepartments ? Set.of() : Set.copyOf(dao.accountDepartments(username));
-        Set<Long> applications = allApplications ? Set.of() : Set.copyOf(dao.accountApplications(username));
-        return new AdminPrincipal(username, blankTo(displayName, username), role, granted.name(), Collections.unmodifiableSet(functions),
+        Set<Long> departments = allDepartments ? Set.of() : Set.copyOf(dao.accountDepartments(id));
+        Set<Long> applications = allApplications ? Set.of() : Set.copyOf(dao.accountApplications(id));
+        return new AdminPrincipal(id, username, blankTo(displayName, username), role, granted.name(), Collections.unmodifiableSet(functions),
                 root, kind, allDepartments, departments, allApplications, applications);
     }
 

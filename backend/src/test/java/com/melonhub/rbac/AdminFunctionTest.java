@@ -103,11 +103,11 @@ class AdminFunctionTest {
             GET /api/admin/audit/verify ANY
             GET /api/admin/accounts SUPER
             POST /api/admin/accounts SUPER
-            PUT /api/admin/accounts/{username} SUPER
-            PUT /api/admin/accounts/{username}/password SUPER
-            POST /api/admin/accounts/{username}/mfa/reset SUPER
-            POST /api/admin/accounts/{username}/unlock SUPER
-            DELETE /api/admin/accounts/{username} SUPER
+            PUT /api/admin/accounts/{id} SUPER
+            PUT /api/admin/accounts/{id}/password SUPER
+            POST /api/admin/accounts/{id}/mfa/reset SUPER
+            POST /api/admin/accounts/{id}/unlock SUPER
+            DELETE /api/admin/accounts/{id} SUPER
             """;
 
     @Autowired @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping mappings;

@@ -9,7 +9,7 @@ import java.util.Set;
  * the account: the departments and applications it is limited to. root is a top of the administrator tree, kind is
  * MANAGER or DEPARTMENT. All of this is platform-level and independent of the RBAC0 data being managed.
  */
-public record AdminPrincipal(String username, String displayName, String role, String roleName, Set<AdminFunction> functions,
+public record AdminPrincipal(long id, String username, String displayName, String role, String roleName, Set<AdminFunction> functions,
                              boolean root, String kind, boolean allDepartments, Set<Long> departmentIds,
                              boolean allApplications, Set<Long> applicationIds) {
     /** Codes of the built-in roles created by V6. */

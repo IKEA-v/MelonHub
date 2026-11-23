@@ -14,8 +14,8 @@ import GuardedLink from '../components/GuardedLink.vue'
 const hub = useHub()
 const list = useList<Account>(() => get<Account[]>('/admin/accounts'))
 const roles = useList<AdminRoleDefinition>(() => get<AdminRoleDefinition[]>('/admin/admin-roles'))
-const expanded = ref<string[]>([])
-onMounted(async () => { await Promise.all([list.load(), roles.load()]); expanded.value = list.rows.value.map(a => a.username) })
+const expanded = ref<number[]>([])
+onMounted(async () => { await Promise.all([list.load(), roles.load()]); expanded.value = list.rows.value.map(a => a.id) })
 const roleName = (code: string) => roles.rows.value.find(r => r.code === code)?.name ?? code
 const roleDescription = computed(() => roles.rows.value.find(r => r.code === form.role)?.description)
 const kindLabels: Record<AdminKind, string> = { MANAGER: '管理员', DEPARTMENT: '部门管理员' }
@@ -24,10 +24,10 @@ const notManaged = '只能管理自己下级的管理员账号'
 type AccountRow = Account & { children?: AccountRow[] }
 /** The accounts as the administrator tree: each under the account that manages it; the operator's own account on top. */
 const tree = computed(() => {
-  const rows = new Map<string, AccountRow>(list.rows.value.map(a => [a.username, { ...a }]))
+  const rows = new Map<number, AccountRow>(list.rows.value.map(a => [a.id, { ...a }]))
   const top: AccountRow[] = []
   for (const row of rows.values()) {
-    const parent = row.parentUsername ? rows.get(row.parentUsername) : undefined
+    const parent = row.parentId ? rows.get(row.parentId) : undefined
     if (parent) (parent.children ??= []).push(row)
     else top.push(row)
   }
@@ -48,14 +48,14 @@ const columns: TableColumnsType<AccountRow> = [
 
 const open = ref(false), saving = ref(false), editing = ref<Account | null>(null), formRef = ref<FormInstance>()
 const form = reactive<{
-  username: string; displayName: string; role: string; kind: AdminKind; parentUsername: string
+  username: string; displayName: string; role: string; kind: AdminKind; parentId: number | undefined
   allDepartments: boolean; departmentIds: number[]; allApplications: boolean; applicationIds: number[]
   enabled: boolean; password: string; confirm: string
 }>({
-  username: '', displayName: '', role: 'ADMIN', kind: 'MANAGER', parentUsername: '', allDepartments: true, departmentIds: [],
+  username: '', displayName: '', role: 'ADMIN', kind: 'MANAGER', parentId: undefined, allDepartments: true, departmentIds: [],
   allApplications: true, applicationIds: [], enabled: true, password: '', confirm: '',
 })
-const self = computed(() => editing.value?.username === hub.me?.username)
+const self = computed(() => editing.value?.id === hub.me?.id)
 const departmentRole = computed(() => form.role === 'DEPARTMENT_ADMIN')
 const softwareRole = computed(() => form.role === 'APP_ADMIN')
 const roleOptions = computed(() => roles.rows.value
@@ -65,22 +65,20 @@ const roleOptions = computed(() => roles.rows.value
   .map(r => ({ value: r.code, label: r.name })))
 /** Accounts a new or moved account can be placed under: the operator itself and the managers it manages. */
 const parentOptions = computed(() => list.rows.value
-  .filter(a => a.kind === 'MANAGER' && (a.username === hub.me?.username || a.manageable) && a.username !== editing.value?.username)
-  .map(a => ({ value: a.username, label: `${a.displayName}（${a.username}）` })))
-const parent = computed(() => list.rows.value.find(a => a.username === form.parentUsername))
+  .filter(a => a.kind === 'MANAGER' && (a.id === hub.me?.id || a.manageable) && a.id !== editing.value?.id)
+  .map(a => ({ value: a.id, label: `${a.displayName}（${a.username}）` })))
+const parent = computed(() => list.rows.value.find(a => a.id === form.parentId))
 /** A child stays within its parent: when the parent is limited, only the parent's departments and applications are offered. */
 const departmentChoices = computed(() => !parent.value || parent.value.allDepartments ? hub.departmentOptions
   : hub.departmentOptions.filter(o => parent.value!.departmentIds.includes(o.value)))
 const applicationChoices = computed(() => !parent.value || parent.value.allApplications ? hub.applicationOptions
   : hub.applicationOptions.filter(o => parent.value!.applicationIds.includes(o.value)))
-// Usernames only use characters that are valid in a path segment as they are; percent-encoding "@" would make
-// a non-canonical path, which the server refuses.
-const accountPath = (username: string) => `/admin/accounts/${username}`
+const accountPath = (id: number) => `/admin/accounts/${id}`
 const rules = computed(() => ({
   username: [{ required: true, pattern: /^[a-zA-Z0-9_@-][a-zA-Z0-9_.@-]{2,99}$/, message: '3-100 位字母、数字或 _ . @ -，不能以 . 开头' }],
   displayName: [{ max: 100, message: '最多 100 字' }],
   role: [{ required: true, message: '请选择角色' }],
-  parentUsername: [{ required: !editing.value || !!editing.value.parentUsername, message: '请选择上级管理员' }],
+  parentId: [{ required: !editing.value || !!editing.value.parentId, message: '请选择上级管理员' }],
   departmentIds: form.allDepartments ? [] : [{ required: true, type: 'array', min: 1, message: '至少选择一个可管理的部门' }],
   applicationIds: form.allApplications ? [] : [{ required: true, type: 'array', min: 1, message: '至少选择一个可管理的软件' }],
   password: editing.value ? [] : newPasswordRules(),
@@ -109,10 +107,10 @@ function applyRoleScope() {
 }
 function edit(row?: Account, under?: Account) {
   editing.value = row ?? null
-  const parentAccount = under ?? (row ? undefined : list.rows.value.find(a => a.username === hub.me?.username))
+  const parentAccount = under ?? (row ? undefined : list.rows.value.find(a => a.id === hub.me?.id))
   Object.assign(form, {
     username: row?.username ?? '', displayName: row?.displayName ?? '', role: row?.role ?? 'ADMIN', kind: row?.kind ?? 'MANAGER',
-    parentUsername: row?.parentUsername ?? parentAccount?.username ?? '',
+    parentId: row?.parentId ?? parentAccount?.id,
     allDepartments: row?.allDepartments ?? parentAccount?.allDepartments ?? true, departmentIds: [...(row?.departmentIds ?? [])],
     allApplications: row?.allApplications ?? parentAccount?.allApplications ?? true, applicationIds: [...(row?.applicationIds ?? [])],
     enabled: row?.enabled ?? true, password: '', confirm: '',
@@ -123,15 +121,15 @@ async function save() {
   await formRef.value?.validate()
   const body = {
     displayName: form.displayName.trim(), role: form.role, enabled: form.enabled, kind: form.kind,
-    parentUsername: form.parentUsername || undefined,
+    parentId: form.parentId,
     allDepartments: form.allDepartments, departmentIds: form.allDepartments ? [] : form.departmentIds,
     allApplications: form.allApplications, applicationIds: form.allApplications ? [] : form.applicationIds,
   }
   const ok = await attempt(saving, () => editing.value
-    ? send('PUT', accountPath(editing.value.username), self.value ? { displayName: body.displayName, role: form.role, enabled: true } : body)
+    ? send('PUT', accountPath(editing.value.id), self.value ? { displayName: body.displayName, role: form.role, enabled: true } : body)
     : send('POST', '/admin/accounts', { ...body, username: form.username.trim(), password: form.password }),
   editing.value ? '管理员已更新' : '管理员已创建')
-  if (ok) { open.value = false; await list.load(); expanded.value = list.rows.value.map(a => a.username) }
+  if (ok) { open.value = false; await list.load(); expanded.value = list.rows.value.map(a => a.id) }
 }
 
 const resetOpen = ref(false), resetTarget = ref<Account | null>(null), resetting = ref(false), resetRef = ref<FormInstance>()
@@ -143,15 +141,15 @@ const resetRules = {
 function askReset(row: Account) { resetTarget.value = row; Object.assign(reset, { password: '', confirm: '' }); resetOpen.value = true }
 async function saveReset() {
   await resetRef.value?.validate()
-  const ok = await attempt(resetting, () => send('PUT', `${accountPath(resetTarget.value!.username)}/password`, { password: reset.password }), '密码已重置，该账号的全部会话已下线')
+  const ok = await attempt(resetting, () => send('PUT', `${accountPath(resetTarget.value!.id)}/password`, { password: reset.password }), '密码已重置，该账号的全部会话已下线')
   if (ok) { resetOpen.value = false; list.load() }
 }
 async function unlock(row: Account) {
-  try { await send('POST', `${accountPath(row.username)}/unlock`); message.success('账号已解锁'); list.load() }
+  try { await send('POST', `${accountPath(row.id)}/unlock`); message.success('账号已解锁'); list.load() }
   catch (e) { message.error(errorText(e)) }
 }
 async function remove(row: Account) {
-  try { await send('DELETE', accountPath(row.username)); message.success('管理员已删除'); list.load() }
+  try { await send('DELETE', accountPath(row.id)); message.success('管理员已删除'); list.load() }
   catch (e) { message.error(errorText(e)) }
 }
 function resetMfa(row: Account) {
@@ -161,7 +159,7 @@ function resetMfa(row: Account) {
     okText: '重置', okType: 'danger', cancelText: '取消',
     async onOk() {
       try {
-        await send('POST', `${accountPath(row.username)}/mfa/reset`)
+        await send('POST', `${accountPath(row.id)}/mfa/reset`)
         message.success(`已重置 ${row.username} 的两步验证`)
         list.load()
       } catch (e) { message.error(errorText(e)) }
@@ -173,7 +171,7 @@ function more(row: Account, key: string) {
   else if (key === 'unlock') unlock(row)
   else if (key === 'resetMfa') resetMfa(row)
 }
-const isSelf = (row: Account) => row.username === hub.me?.username
+const isSelf = (row: Account) => row.id === hub.me?.id
 </script>
 
 <template>
@@ -183,14 +181,14 @@ const isSelf = (row: Account) => row.username === hub.me?.username
       <GuardedButton fn="account.manage" :allowed="hub.can('account.manage') && hub.me?.kind === 'MANAGER'" type="primary" @click="edit()"><PlusOutlined />新建管理员</GuardedButton>
     </PageHead>
     <a-card :bordered="false">
-      <a-table :columns="columns" :data-source="tree" row-key="username" size="small" :loading="list.loading.value" :scroll="{ x: 1300 }" :pagination="false"
+      <a-table :columns="columns" :data-source="tree" row-key="id" size="small" :loading="list.loading.value" :scroll="{ x: 1300 }" :pagination="false"
                v-model:expanded-row-keys="expanded">
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'username'"><code>{{ record.username }}</code><a-tag v-if="isSelf(record)" class="title-tag">当前</a-tag></template>
           <template v-else-if="column.key === 'role'"><a-tag :color="roleColor(record.role)">{{ roleName(record.role) }}</a-tag></template>
           <template v-else-if="column.key === 'kind'">
             <a-tag :color="record.kind === 'DEPARTMENT' ? 'gold' : 'geekblue'">{{ kindLabels[record.kind as AdminKind] }}</a-tag>
-            <a-tag v-if="!record.parentUsername" class="title-tag">顶级</a-tag>
+            <a-tag v-if="!record.parentId" class="title-tag">顶级</a-tag>
           </template>
           <template v-else-if="column.key === 'scope'">
             <div>
@@ -252,8 +250,8 @@ const isSelf = (row: Account) => row.username === hub.me?.username
         </a-row>
         <a-row :gutter="16">
           <a-col :xs="24" :sm="12">
-            <a-form-item label="上级管理员" name="parentUsername" extra="下级的角色功能与管理范围不能超过上级">
-              <a-select v-model:value="form.parentUsername" :options="parentOptions" :disabled="self || (!!editing && !editing.parentUsername)" placeholder="顶级" />
+            <a-form-item label="上级管理员" name="parentId" extra="下级的角色功能与管理范围不能超过上级">
+              <a-select v-model:value="form.parentId" :options="parentOptions" :disabled="self || (!!editing && !editing.parentId)" placeholder="顶级" />
             </a-form-item>
           </a-col>
           <a-col :xs="24" :sm="12">

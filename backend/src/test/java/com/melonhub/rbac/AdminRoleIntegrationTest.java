@@ -92,7 +92,7 @@ class AdminRoleIntegrationTest {
         String code = role("TEMP", List.of("org.view"));
         String user = account("temp", code, null);
         as(root, delete("/api/admin/admin-roles/" + code), null).andExpect(status().isConflict());
-        as(root, delete("/api/admin/accounts/" + user), null).andExpect(status().isOk());
+        as(root, delete("/api/admin/accounts/" + auth.principal(user).id()), null).andExpect(status().isOk());
         as(root, delete("/api/admin/admin-roles/" + code), null).andExpect(status().isOk());
         as(root, delete("/api/admin/admin-roles/" + code), null).andExpect(status().isNotFound());
     }

@@ -263,7 +263,7 @@ POST /api/v1/access-requests
 - 停用、删除、强制下线和重置统一身份密码都要求用户的全部所属部门在操作者范围内。
 - `department.manage`、`application.manage`、`application.credentials`、`role.manage` 是平台级功能，以及用户批量导入，只对全部部门的账号开放（`403`“该功能只对可管理全部部门的管理员开放”）。
 
-`/api/auth/login` 与 `/api/auth/me` 另返回 `root`、`kind`、`allDepartments`、`departmentIds`。
+`/api/auth/login` 与 `/api/auth/me` 另返回数字主键 `id`、`root`、`kind`、`allDepartments`、`departmentIds`。登录请求仍使用 `username`。
 
 ### 5.3 部门、软件与 API Key
 
@@ -410,13 +410,15 @@ POST /api/v1/access-requests
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/admin/accounts` | 本人及所管理的账号：角色、上级 `parentUsername`、类型 `kind`、部门范围（`allDepartments`、`departmentIds`）、软件范围（`allApplications`、`applicationIds`）、`manageable`（当前操作者能否修改）、启用状态、锁定、最近登录、两步验证 |
-| POST | `/api/admin/accounts` | `{"username":"ops.zhang","displayName":"张工","role":"APP_ADMIN","password":"12–100 个字符","enabled":true,"parentUsername":"east-lead","kind":"DEPARTMENT","allDepartments":false,"departmentIds":[2],"allApplications":false,"applicationIds":[3]}`；`parentUsername` 默认为操作者本人，必须是本人或本人管理的管理员；`kind` 默认 `MANAGER` |
-| PUT | `/api/admin/accounts/{username}` | `{"displayName":"","role":"ADMIN","enabled":true}`，可另带 `parentUsername`（移到本人或本人管理的管理员之下）、`kind`、部门与软件范围；省略的范围、类型和上级保持不变 |
-| PUT | `/api/admin/accounts/{username}/password` | `{"password":"12–100 个字符"}`，重置后该账号全部会话下线 |
-| POST | `/api/admin/accounts/{username}/unlock` | 解除登录锁定 |
-| POST | `/api/admin/accounts/{username}/mfa/reset` | 重置两步验证（设备丢失时使用），之后该账号仅凭密码登录，直到重新绑定 |
-| DELETE | `/api/admin/accounts/{username}` | 删除账号及其全部会话 |
+| GET | `/api/admin/accounts` | 本人及所管理的账号，含数字主键 `id`、用户名、角色、上级 `parentId`、类型 `kind`、部门范围（`allDepartments`、`departmentIds`）、软件范围（`allApplications`、`applicationIds`）、`manageable`（当前操作者能否修改）、启用状态、锁定、最近登录、两步验证 |
+| POST | `/api/admin/accounts` | `{"username":"ops.zhang","displayName":"张工","role":"DEPARTMENT_ADMIN","password":"12–100 个字符","enabled":true,"parentId":12,"kind":"DEPARTMENT","allDepartments":false,"departmentIds":[2],"allApplications":true}`；`parentId` 默认为操作者本人，必须是本人或本人管理的管理员；`kind` 默认 `MANAGER`。返回 `id` 和 `username` |
+| PUT | `/api/admin/accounts/{id}` | `{"displayName":"","role":"ADMIN","enabled":true}`，可另带 `parentId`（移到本人或本人管理的管理员之下）、`kind`、部门与软件范围；省略的范围、类型和上级保持不变 |
+| PUT | `/api/admin/accounts/{id}/password` | `{"password":"12–100 个字符"}`，重置后该账号全部会话下线 |
+| POST | `/api/admin/accounts/{id}/unlock` | 解除登录锁定 |
+| POST | `/api/admin/accounts/{id}/mfa/reset` | 重置两步验证（设备丢失时使用），之后该账号仅凭密码登录，直到重新绑定 |
+| DELETE | `/api/admin/accounts/{id}` | 删除账号及其全部会话 |
+
+账号操作路径中的 `id` 取自创建响应或管理员列表。创建和编辑账号时，`parentId` 优先于兼容字段 `parentUsername`。顶级账号的上级字段为 `null`。
 
 `allApplications` 为 `false` 时账号只能管理 `applicationIds` 中的软件；新建时省略 `allApplications`，提供 `applicationIds` 表示限定为这些软件，不提供表示全部软件（部门范围同理）。角色不存在返回 400。只能修改、重置、解锁、删除自己管理的账号（`403`）；自己只能改显示名称，不能修改自己的角色、类型、范围、上级，也不能停用或删除自己；还有下级的账号不能停用或删除（`409`）；平台至少保留一个启用的超级管理员。修改角色或停用账号后，该账号的全部会话立即下线；修改软件范围在下一次请求生效。账号名为 3–100 位字母、数字或 `_ . @ -`，不能以 `.` 开头；路径中直接使用账号名，`@` 与 `.` 不需要转义。密码规则与会话失效规则见第 5.1 节。
 

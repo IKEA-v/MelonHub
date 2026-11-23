@@ -17,7 +17,7 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "admin_sessions")
 public class AdminSession {
     @Id @JdbcTypeCode(SqlTypes.CHAR) @Column(length = 64) private String tokenHash;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "username") private AdminAccount account;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "account_id") private AdminAccount account;
     private Instant expiresAt;
     /** Set by the database default; read back after insert. */
     @Generated @Column(insertable = false, updatable = false) private Instant createdAt;

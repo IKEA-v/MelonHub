@@ -5,7 +5,7 @@ export type AdminFunctionCode = 'org.view' | 'department.manage' | 'user.manage'
   | 'audit.view' | 'system.view' | 'account.manage' | 'role.manage'
 export type AdminKind = 'MANAGER' | 'DEPARTMENT'
 export interface Principal {
-  username: string; displayName: string; role: string; roleName: string; functions: AdminFunctionCode[]
+  id: number; username: string; displayName: string; role: string; roleName: string; functions: AdminFunctionCode[]
   /** A root of the administrator tree manages every account; kind DEPARTMENT is a leaf limited to its departments. */
   root: boolean; kind: AdminKind
   /** False when the account may only manage the departments in departmentIds (likewise for applications). */
@@ -46,11 +46,11 @@ export interface Overview {
 }
 export interface Health { status: string; database: string; cache: string; model?: string }
 export interface Account {
-  username: string; displayName: string; role: string; enabled: boolean; failedAttempts: number; locked: boolean
+  id: number; username: string; displayName: string; role: string; enabled: boolean; failedAttempts: number; locked: boolean
   lockedUntil: string | null; lastLoginAt: string | null; passwordChangedAt: string | null; createdAt: string
   activeSessions: number; allApplications: boolean; applicationIds: number[]; mfaEnabled: boolean
   /** The managing account; null for a root. manageable: whether the signed-in operator may change this account. */
-  parentUsername: string | null; kind: AdminKind; allDepartments: boolean; departmentIds: number[]; manageable: boolean
+  parentId: number | null; kind: AdminKind; allDepartments: boolean; departmentIds: number[]; manageable: boolean
 }
 export interface AccessDomain {
   departmentId: number; departmentName: string; applicationId: number; applicationName: string; applicationEnabled: boolean

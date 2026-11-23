@@ -23,20 +23,20 @@ class ApiGuardRequestLogTest {
     void recordsMenuRequestWithoutCredentialsOrUserInput(CapturedOutput output) throws Exception {
         ApiGuard guard = new ApiGuard(mock(AuthService.class), new ObjectMapper(),
                 mock(GlobalRateLimiter.class), mock(ApplicationRateLimits.class), 10);
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/accounts/example-user");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/accounts/42");
         request.addHeader("X-Request-Id", "menu-test-1234");
         request.addHeader("Authorization", "Bearer private-test-token");
         request.setQueryString("keyword=private-search-value");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         guard.doFilter(request, response, (incoming, outgoing) -> {
-            incoming.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/admin/accounts/{username}");
+            incoming.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/admin/accounts/{id}");
             response.setStatus(403);
         });
 
         assertThat(response.getHeader("X-Request-Id")).isEqualTo("menu-test-1234");
         assertThat(output.getOut())
-                .contains("requestId=menu-test-1234 method=GET route=/api/admin/accounts/{username} status=403 durationMs=")
+                .contains("requestId=menu-test-1234 method=GET route=/api/admin/accounts/{id} status=403 durationMs=")
                 .doesNotContain("example-user", "private-test-token", "private-search-value");
     }
 }

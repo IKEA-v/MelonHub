@@ -31,17 +31,17 @@ alt 候选树违反层级或范围规则
   S --> Caller: 409 CONFLICT
 else 候选树满足规则
   autonumber resume
-  S -> D: createAccount(...)
+  S -> D: id = createAccount(..., parentId, ...)
   activate D
   deactivate D
-  S -> D: replaceAccountApplications(...)
+  S -> D: replaceAccountApplications(id, applications)
   activate D
   deactivate D
-  S -> D: replaceAccountDepartments(...)
+  S -> D: replaceAccountDepartments(id, departments)
   activate D
   deactivate D
   autonumber stop
-  C --> Caller: 200 {username}
+  C --> Caller: 200 {id, username}
 end
 deactivate S
 deactivate C

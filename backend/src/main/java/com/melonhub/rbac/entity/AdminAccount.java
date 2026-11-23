@@ -5,6 +5,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -14,11 +16,12 @@ import java.util.HashSet;
 import java.util.Set;
 import org.hibernate.annotations.Generated;
 
-/** Console operator account. The username is the key, so new accounts must be persisted, never merged. */
+/** Console operator account. The generated id identifies the account independently of its login name. */
 @Entity
 @Table(name = "admin_accounts")
 public class AdminAccount {
-    @Id private String username;
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(nullable = false, unique = true) private String username;
     private String passwordHash;
     private String displayName;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "role") private AdminRole role;
@@ -34,20 +37,20 @@ public class AdminAccount {
     private long mfaLastStep;
     private long credentialVersion;
     /** The account that manages this one; null for a root of the administrator tree. */
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "parent_username") private AdminAccount parent;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "parent_id") private AdminAccount parent;
     /** MANAGER may have accounts below it; DEPARTMENT is a leaf limited to its departments. */
     private String kind;
     /** False when the account may only manage the departments listed in departmentIds. */
     private boolean allDepartments;
     @ElementCollection
-    @CollectionTable(name = "admin_account_departments", joinColumns = @JoinColumn(name = "username"))
+    @CollectionTable(name = "admin_account_departments", joinColumns = @JoinColumn(name = "account_id"))
     @Column(name = "department_id")
     private Set<Long> departmentIds = new HashSet<>();
     /** False when the account may only manage the applications listed in applicationIds. */
     private boolean allApplications;
     /** Applications the account may manage when allApplications is false. */
     @ElementCollection
-    @CollectionTable(name = "admin_account_applications", joinColumns = @JoinColumn(name = "username"))
+    @CollectionTable(name = "admin_account_applications", joinColumns = @JoinColumn(name = "account_id"))
     @Column(name = "application_id")
     private Set<Long> applicationIds = new HashSet<>();
 
@@ -66,6 +69,7 @@ public class AdminAccount {
         this.passwordChangedAt = passwordChangedAt;
     }
 
+    public Long getId() { return id; }
     public String getUsername() { return username; }
     public String getPasswordHash() { return passwordHash; }
     public String getDisplayName() { return displayName; }

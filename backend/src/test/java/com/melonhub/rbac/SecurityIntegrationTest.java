@@ -57,7 +57,7 @@ class SecurityIntegrationTest {
         suffix = Credentials.token().substring(0, 10);
         String root = "security-root-" + suffix;
         db.update("INSERT INTO admin_accounts(username,display_name,role,password_hash,enabled) VALUES (?,'root','SUPER_ADMIN','-',FALSE)", root);
-        ROOT = TestAdmins.superAdmin(root);
+        ROOT = auth.principal(root);
         d1 = r.department(new Requests.Department("Security", "sec-" + suffix), null, "test");
         a1 = ((Number) r.application(new Requests.Application("SecOne", "s1-" + suffix, ""), "test").get("id")).longValue();
         a2 = ((Number) r.application(new Requests.Application("SecTwo", "s2-" + suffix, ""), "test").get("id")).longValue();
@@ -173,7 +173,7 @@ class SecurityIntegrationTest {
         for (int i = 1; i <= 4; i++) attempt(user, "wrong-password-" + i).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("BAD_CREDENTIALS"));
         attempt(user, "wrong-password-5").andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
         attempt(user, PASSWORD).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCOUNT_LOCKED"));
-        auth.unlock(user, ROOT);
+        auth.unlock(auth.principal(user).id(), ROOT);
         login(user);
         attempt("missing-" + suffix, PASSWORD).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("BAD_CREDENTIALS"));
     }
@@ -182,7 +182,7 @@ class SecurityIntegrationTest {
         String user = account(AdminPrincipal.ADMIN, null);
         String token = login(user);
         mvc.perform(get("/api/auth/me").header("Authorization", token)).andExpect(status().isOk()).andExpect(jsonPath("$.role").value("ADMIN"));
-        auth.updateAccount(user, new Requests.AccountUpdate(null, AdminPrincipal.ADMIN, false, null), ROOT);
+        auth.updateAccount(auth.principal(user).id(), new Requests.AccountUpdate(null, AdminPrincipal.ADMIN, false, null), ROOT);
         mvc.perform(get("/api/auth/me").header("Authorization", token)).andExpect(status().isUnauthorized());
         attempt(user, PASSWORD).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ACCOUNT_DISABLED"));
     }
@@ -215,33 +215,33 @@ class SecurityIntegrationTest {
         mvc.perform(get("/api/admin/accounts").header("Authorization", root)).andExpect(status().isOk());
         mvc.perform(post("/api/admin/accounts").header("Authorization", root).contentType(MediaType.APPLICATION_JSON)
                 .content(json(Map.of("username", "short-" + suffix, "role", "ADMIN", "password", "too-short")))).andExpect(status().isBadRequest());
-        mvc.perform(put("/api/admin/accounts/super-admin-" + suffix).header("Authorization", root).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/admin/accounts/" + auth.principal("super-admin-" + suffix).id()).header("Authorization", root).contentType(MediaType.APPLICATION_JSON)
                 .content(json(Map.of("role", "ADMIN", "enabled", true)))).andExpect(status().isBadRequest());
     }
 
     @Test void theLastEnabledSuperAdministratorCannotBeRemoved() {
-        assertThatThrownBy(() -> auth.updateAccount(bootstrap, new Requests.AccountUpdate(null, AdminPrincipal.ADMIN, true, null), ROOT))
+        assertThatThrownBy(() -> auth.updateAccount(auth.principal(bootstrap).id(), new Requests.AccountUpdate(null, AdminPrincipal.ADMIN, true, null), ROOT))
             .isInstanceOf(ApiException.class).hasMessageContaining("超级管理员");
-        assertThatThrownBy(() -> auth.deleteAccount(bootstrap, ROOT)).isInstanceOf(ApiException.class).hasMessageContaining("超级管理员");
+        assertThatThrownBy(() -> auth.deleteAccount(auth.principal(bootstrap).id(), ROOT)).isInstanceOf(ApiException.class).hasMessageContaining("超级管理员");
     }
 
     @Test void credentialChangesEndSessionsIncludingOneStillBeingCreated() throws Exception {
         String user = account(AdminPrincipal.ADMIN, null);
         String token = login(user);
         var checked = authDao.account(user).orElseThrow();
-        auth.resetPassword(user, new Requests.PasswordReset(PASSWORD + "-reset"), ROOT);
+        auth.resetPassword(auth.principal(user).id(), new Requests.PasswordReset(PASSWORD + "-reset"), ROOT);
         mvc.perform(get("/api/auth/me").header("Authorization", token)).andExpect(status().isUnauthorized());
         // A login that verified the old password just before the reset cannot create its session afterwards.
         assertThat(authDao.createSession(Credentials.hash(Credentials.token()), checked, Instant.now().plusSeconds(600), "127.0.0.1")).isZero();
         // Nor does a session row written with the old credential version authenticate.
         String late = Credentials.token();
-        db.update("INSERT INTO admin_sessions(token_hash,username,expires_at,source_ip,credential_version) VALUES (?,?,TIMESTAMPADD(HOUR,1,CURRENT_TIMESTAMP),'127.0.0.1',?)",
-                Credentials.hash(late), user, checked.credentialVersion());
+        db.update("INSERT INTO admin_sessions(token_hash,account_id,expires_at,source_ip,credential_version) VALUES (?,?,TIMESTAMPADD(HOUR,1,CURRENT_TIMESTAMP),'127.0.0.1',?)",
+                Credentials.hash(late), checked.id(), checked.credentialVersion());
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + late)).andExpect(status().isUnauthorized());
         String body = attempt(user, PASSWORD + "-reset").andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String fresh = "Bearer " + mapper.readTree(body).get("token").asText();
         var current = authDao.account(user).orElseThrow();
-        auth.updateAccount(user, new Requests.AccountUpdate(null, AdminPrincipal.AUDITOR, true, null), ROOT);
+        auth.updateAccount(auth.principal(user).id(), new Requests.AccountUpdate(null, AdminPrincipal.AUDITOR, true, null), ROOT);
         mvc.perform(get("/api/auth/me").header("Authorization", fresh)).andExpect(status().isUnauthorized());
         assertThat(authDao.createSession(Credentials.hash(Credentials.token()), current, Instant.now().plusSeconds(600), "127.0.0.1")).isZero();
     }
@@ -249,23 +249,25 @@ class SecurityIntegrationTest {
     @Test void aLoginCheckedAgainstADeletedAccountCannotOpenASessionForItsNamesake() throws Exception {
         String user = account(AdminPrincipal.ADMIN, null);
         var checked = authDao.account(user).orElseThrow();
-        auth.deleteAccount(user, ROOT);
+        auth.deleteAccount(auth.principal(user).id(), ROOT);
         auth.createAccount(new Requests.Account(user, null, AdminPrincipal.AUDITOR, PASSWORD, true, null), ROOT);
-        // Same name and same credential version: only the password hash tells the two accounts apart.
+        // A recreated login name has a different ID even when the credential version is the same.
+        assertThat(auth.principal(user).id()).isNotEqualTo(checked.id());
         assertThat(authDao.account(user).orElseThrow().credentialVersion()).isEqualTo(checked.credentialVersion());
         assertThat(authDao.createSession(Credentials.hash(Credentials.token()), checked, Instant.now().plusSeconds(600), "127.0.0.1")).isZero();
         attempt(user, PASSWORD).andExpect(status().isOk());
     }
 
-    @Test void accountNamesWithAtSignsAndDotsWorkInAccountPaths() throws Exception {        String root = login(account(AdminPrincipal.SUPER_ADMIN, null));
+    @Test void accountNamesWithAtSignsAndDotsStillSupportLogin() throws Exception {
+        String root = login(account(AdminPrincipal.SUPER_ADMIN, null));
         String name = "ops." + suffix + "@corp.example";
         mvc.perform(post("/api/admin/accounts").header("Authorization", root).contentType(MediaType.APPLICATION_JSON)
                 .content(json(Map.of("username", name, "role", "ADMIN", "password", PASSWORD)))).andExpect(status().isOk());
-        mvc.perform(put("/api/admin/accounts/" + name + "/password").header("Authorization", root).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/admin/accounts/" + auth.principal(name).id() + "/password").header("Authorization", root).contentType(MediaType.APPLICATION_JSON)
                 .content(json(Map.of("password", PASSWORD + "-reset")))).andExpect(status().isOk());
-        mvc.perform(post("/api/admin/accounts/" + name + "/unlock").header("Authorization", root)).andExpect(status().isOk());
+        mvc.perform(post("/api/admin/accounts/" + auth.principal(name).id() + "/unlock").header("Authorization", root)).andExpect(status().isOk());
         attempt(name, PASSWORD + "-reset").andExpect(status().isOk());
-        mvc.perform(delete("/api/admin/accounts/" + name).header("Authorization", root)).andExpect(status().isOk());
+        mvc.perform(delete("/api/admin/accounts/" + auth.principal(name).id()).header("Authorization", root)).andExpect(status().isOk());
         // A leading dot would make a path segment the guard refuses, so such a name is never accepted.
         mvc.perform(post("/api/admin/accounts").header("Authorization", root).contentType(MediaType.APPLICATION_JSON)
                 .content(json(Map.of("username", ".hidden-" + suffix, "role", "ADMIN", "password", PASSWORD)))).andExpect(status().isBadRequest());

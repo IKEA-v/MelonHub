@@ -213,7 +213,7 @@ class GovernanceIntegrationTest {
         String username = "mfa-" + Credentials.token().substring(0, 8);
         String password = "mfa-password-123";
         auth.createAccount(new Requests.Account(username, "MFA 用户", "AUDITOR", password, true, null), root);
-        var principal = TestAdmins.self(username, "MFA 用户", "AUDITOR");
+        var principal = auth.principal(username);
         String beforeEnable = (String) auth.login(new Requests.Login(username, password)).get("token");
         var setup = auth.setupMfa(principal);
         String secret = (String) setup.get("secret");
@@ -238,7 +238,7 @@ class GovernanceIntegrationTest {
         auth.disableMfa(principal, new Requests.MfaDisable(password, code));
         assertThatThrownBy(() -> auth.admin("Bearer " + beforeDisable)).isInstanceOf(ApiException.class);
         String beforeReset = (String) auth.login(new Requests.Login(username, password)).get("token");
-        auth.resetMfa(username, root);
+        auth.resetMfa(principal.id(), root);
         assertThatThrownBy(() -> auth.admin("Bearer " + beforeReset)).isInstanceOf(ApiException.class);
     }
 

@@ -150,7 +150,71 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/auth/login:
+    post:
+      operationId: loginAdminConsole
+      tags: [平台管理员]
+      summary: 使用用户名登录管理控制台
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, maxLength: 100 }
+                password: { type: string, format: password, maxLength: 100, writeOnly: true }
+                mfaCode: { type: string, maxLength: 12, writeOnly: true }
+      responses:
+        '200':
+          description: 登录成功，返回管理员身份与会话
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/AdminPrincipal' }
+                  - type: object
+                    required: [token, expiresIn, idleTimeout]
+                    properties:
+                      token: { type: string }
+                      expiresIn: { type: integer, minimum: 1 }
+                      idleTimeout: { type: integer, minimum: 1 }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/auth/me:
+    get:
+      operationId: getAdminConsolePrincipal
+      tags: [平台管理员]
+      summary: 获取当前管理员身份
+      security:
+        - consoleSession: []
+      responses:
+        '200':
+          description: 当前管理员身份
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminPrincipal' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /api/admin/accounts:
+    get:
+      operationId: listAdminAccounts
+      tags: [平台管理员]
+      summary: 查询本人及所管理的管理员
+      security:
+        - consoleSession: []
+      responses:
+        '200':
+          description: 可见的管理员账号
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AdminAccountView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createAdminAccount
       tags: [平台管理员]
@@ -172,14 +236,148 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [username]
+                required: [id, username]
                 properties:
+                  id: { type: integer, format: int64, minimum: 1 }
                   username: { type: string }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/accounts/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/AdminAccountId' }
+    put:
+      operationId: updateAdminAccount
+      tags: [平台管理员]
+      summary: 修改管理员
+      security:
+        - consoleSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminAccountUpdate' }
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteAdminAccount
+      tags: [平台管理员]
+      summary: 删除管理员
+      security:
+        - consoleSession: []
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/accounts/{id}/password:
+    parameters:
+      - { $ref: '#/components/parameters/AdminAccountId' }
+    put:
+      operationId: resetAdminAccountPassword
+      tags: [平台管理员]
+      summary: 重置管理员密码
+      security:
+        - consoleSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminPasswordReset' }
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/accounts/{id}/unlock:
+    parameters:
+      - { $ref: '#/components/parameters/AdminAccountId' }
+    post:
+      operationId: unlockAdminAccount
+      tags: [平台管理员]
+      summary: 解锁管理员
+      security:
+        - consoleSession: []
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/accounts/{id}/mfa/reset:
+    parameters:
+      - { $ref: '#/components/parameters/AdminAccountId' }
+    post:
+      operationId: resetAdminAccountMfa
+      tags: [平台管理员]
+      summary: 重置管理员两步验证
+      security:
+        - consoleSession: []
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 components:
+  parameters:
+    AdminAccountId:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
     consoleSession: { type: http, scheme: bearer, description: MelonHub 管理控制台会话 }
@@ -256,12 +454,66 @@ components:
         role: { type: string }
         password: { type: string, format: password, minLength: 12, maxLength: 100, writeOnly: true, description: UTF-8 编码最多 72 字节 }
         enabled: { type: boolean, default: true }
-        parentUsername: { type: string, description: 省略时使用当前管理员 }
+        parentId: { type: integer, format: int64, minimum: 1, description: 省略时使用当前管理员 }
+        parentUsername: { type: string, deprecated: true, description: 兼容字段，parentId 优先 }
         kind: { type: string, enum: [MANAGER, DEPARTMENT], default: MANAGER }
         allDepartments: { type: boolean }
         departmentIds: { type: array, maxItems: 200, items: { type: integer, format: int64, minimum: 1 } }
         allApplications: { type: boolean }
         applicationIds: { type: array, maxItems: 200, items: { type: integer, format: int64, minimum: 1 } }
+    AdminAccountUpdate:
+      type: object
+      required: [role, enabled]
+      properties:
+        displayName: { type: string, maxLength: 100 }
+        role: { type: string }
+        enabled: { type: boolean }
+        parentId: { type: integer, format: int64, minimum: 1, description: 省略时保留现有上级 }
+        parentUsername: { type: string, deprecated: true, description: 兼容字段，parentId 优先 }
+        kind: { type: string, enum: [MANAGER, DEPARTMENT] }
+        allDepartments: { type: boolean }
+        departmentIds: { type: array, maxItems: 200, items: { type: integer, format: int64, minimum: 1 } }
+        allApplications: { type: boolean }
+        applicationIds: { type: array, maxItems: 200, items: { type: integer, format: int64, minimum: 1 } }
+    AdminPasswordReset:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, format: password, minLength: 12, maxLength: 100, writeOnly: true, description: UTF-8 编码最多 72 字节 }
+    AdminAccountView:
+      type: object
+      required: [id, username, parentId, role, kind]
+      properties:
+        id: { type: integer, format: int64, minimum: 1 }
+        username: { type: string }
+        parentId: { type: [integer, 'null'], format: int64, minimum: 1 }
+        parentUsername: { type: [string, 'null'], deprecated: true }
+        displayName: { type: string }
+        role: { type: string }
+        enabled: { type: boolean }
+        kind: { type: string, enum: [MANAGER, DEPARTMENT] }
+        allDepartments: { type: boolean }
+        departmentIds: { type: array, items: { type: integer, format: int64 } }
+        allApplications: { type: boolean }
+        applicationIds: { type: array, items: { type: integer, format: int64 } }
+        manageable: { type: boolean }
+    AdminPrincipal:
+      type: object
+      required: [id, username, displayName, role, roleName, functions, root, kind, allDepartments, departmentIds, allApplications, applicationIds, mfaEnabled]
+      properties:
+        id: { type: integer, format: int64, minimum: 1 }
+        username: { type: string }
+        displayName: { type: string }
+        role: { type: string }
+        roleName: { type: string }
+        functions: { type: array, items: { type: string } }
+        root: { type: boolean }
+        kind: { type: string, enum: [MANAGER, DEPARTMENT] }
+        allDepartments: { type: boolean }
+        departmentIds: { type: array, items: { type: integer, format: int64 } }
+        allApplications: { type: boolean }
+        applicationIds: { type: array, items: { type: integer, format: int64 } }
+        mfaEnabled: { type: boolean }
     LoginInput:
       type: object
       required: [username, password, systems]

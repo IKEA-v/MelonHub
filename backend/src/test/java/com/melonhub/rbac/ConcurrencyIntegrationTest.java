@@ -51,7 +51,7 @@ class ConcurrencyIntegrationTest {
         auth.createAccount(new Requests.Account(username, "并发登录", "AUDITOR", password, true, null), auth.principal(bootstrap));
         var pool = Executors.newFixedThreadPool(4);
         try {
-            var principal = TestAdmins.self(username, "并发登录", "AUDITOR");
+            var principal = auth.principal(username);
             String secret = (String) auth.setupMfa(principal).get("secret");
             auth.confirmMfa(principal, Totp.codeAt(secret, Totp.currentStep()));
             String code = Totp.codeAt(secret, Totp.currentStep() + 1);
@@ -73,7 +73,6 @@ class ConcurrencyIntegrationTest {
             assertThat(outcomes.stream().filter(outcome -> !outcome.equals("OK")).toList()).hasSize(3).containsOnly("MFA_INVALID");
         } finally {
             pool.shutdownNow();
-            db.update("DELETE FROM admin_sessions WHERE username=?", username);
             db.update("DELETE FROM admin_accounts WHERE username=?", username);
             db.update("DELETE FROM audit_events WHERE actor IN (?,?) OR target=?", ACTOR, username, username);
         }

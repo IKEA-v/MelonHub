@@ -27,36 +27,36 @@ import java.util.TreeSet;
  */
 public final class AdminTree {
     private static final Set<String> ADMINISTRATION = Set.of(AdminFunction.ACCOUNT_MANAGE.code(), AdminFunction.ROLE_MANAGE.code());
-    private final Map<String,AccountNode> nodes = new LinkedHashMap<>();
-    private final Map<String,List<String>> children = new HashMap<>();
+    private final Map<Long,AccountNode> nodes = new LinkedHashMap<>();
+    private final Map<Long,List<Long>> children = new HashMap<>();
     private final Map<String,Set<String>> roleFunctions;
 
     public AdminTree(Collection<AccountNode> accounts, Map<String,Set<String>> roleFunctions) {
         this.roleFunctions = roleFunctions;
-        for (var node : accounts) nodes.put(node.username(), node);
-        for (var node : accounts) if (node.parent() != null) children.computeIfAbsent(node.parent(), k -> new ArrayList<>()).add(node.username());
+        for (var node : accounts) nodes.put(node.id(), node);
+        for (var node : accounts) if (node.parentId() != null) children.computeIfAbsent(node.parentId(), k -> new ArrayList<>()).add(node.id());
     }
 
     public Collection<AccountNode> accounts() { return nodes.values(); }
-    public AccountNode node(String username) { return nodes.get(username); }
-    public List<String> children(String username) { return children.getOrDefault(username, List.of()); }
+    public AccountNode node(long id) { return nodes.get(id); }
+    public List<Long> children(long id) { return children.getOrDefault(id, List.of()); }
 
     /** Every account below this one. */
-    public Set<String> descendants(String username) {
-        var found = new TreeSet<String>();
-        var pending = new ArrayDeque<>(children(username));
+    public Set<Long> descendants(long id) {
+        var found = new TreeSet<Long>();
+        var pending = new ArrayDeque<>(children(id));
         while (!pending.isEmpty()) {
-            String next = pending.poll();
+            long next = pending.poll();
             if (found.add(next)) pending.addAll(children(next));
         }
         return found;
     }
 
     /** Whether the actor may manage the target account: it is below the actor, or the actor is a root. */
-    public boolean manages(String actor, String target) {
+    public boolean manages(long actor, long target) {
         var self = nodes.get(actor);
-        if (self == null || actor.equals(target) || !nodes.containsKey(target)) return false;
-        return self.parent() == null || descendants(actor).contains(target);
+        if (self == null || actor == target || !nodes.containsKey(target)) return false;
+        return self.parentId() == null || descendants(actor).contains(target);
     }
 
     /** What is wrong with the tree, one message per problem; empty when every rule holds. */
@@ -72,14 +72,14 @@ public final class AdminTree {
             if (AdminPrincipal.DEPARTMENT.equals(node.kind())) {
                 if (node.allDepartments() || node.departments().isEmpty()) problems.add(name + "：部门管理员必须指定所管理的部门");
                 if (functions.stream().anyMatch(ADMINISTRATION::contains)) problems.add(name + "：部门管理员不能拥有管理管理员账号或角色的功能");
-                if (!children(name).isEmpty()) problems.add(name + "：部门管理员不能有下级管理员");
+                if (!children(node.id()).isEmpty()) problems.add(name + "：部门管理员不能有下级管理员");
             } else if (!AdminPrincipal.MANAGER.equals(node.kind())) {
                 problems.add(name + "：未知的管理员类型 " + node.kind());
             }
-            if (node.parent() == null) continue;
-            var parent = nodes.get(node.parent());
+            if (node.parentId() == null) continue;
+            var parent = nodes.get(node.parentId());
             if (parent == null) { problems.add(name + "：上级管理员不存在"); continue; }
-            if (loops(name)) { problems.add(name + "：上级关系形成循环"); continue; }
+            if (loops(node.id())) { problems.add(name + "：上级关系形成循环"); continue; }
             var beyond = new TreeSet<>(functions);
             beyond.removeAll(roleFunctions.getOrDefault(parent.role(), Set.of()));
             if (!beyond.isEmpty()) problems.add(name + "：角色功能超出上级 " + parent.username() + "（" + String.join(", ", beyond) + "）");
@@ -91,9 +91,9 @@ public final class AdminTree {
         return problems;
     }
 
-    private boolean loops(String username) {
-        var seen = new HashSet<String>();
-        for (String current = username; current != null; current = nodes.containsKey(current) ? nodes.get(current).parent() : null) {
+    private boolean loops(long id) {
+        var seen = new HashSet<Long>();
+        for (Long current = id; current != null; current = nodes.containsKey(current) ? nodes.get(current).parentId() : null) {
             if (!seen.add(current)) return true;
         }
         return false;

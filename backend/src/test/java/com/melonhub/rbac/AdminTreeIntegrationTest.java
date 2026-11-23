@@ -107,10 +107,10 @@ class AdminTreeIntegrationTest {
         var listed = new ArrayList<String>();
         json(as(manager, get("/api/admin/accounts"), null).andExpect(status().isOk())).forEach(a -> listed.add(a.get("username").asText()));
         assertThat(listed).containsExactlyInAnyOrder("m1-" + s, "dep1-" + s);
-        as(manager, put("/api/admin/accounts/top-" + s), Map.of("role", "ADMIN", "enabled", true)).andExpect(status().isForbidden());
-        as(manager, delete("/api/admin/accounts/top-" + s), null).andExpect(status().isForbidden());
+        as(manager, put("/api/admin/accounts/" + auth.principal("top-" + s).id()), Map.of("role", "ADMIN", "enabled", true)).andExpect(status().isForbidden());
+        as(manager, delete("/api/admin/accounts/" + auth.principal("top-" + s).id()), null).andExpect(status().isForbidden());
         // Its own scope and role are decided above it.
-        as(manager, put("/api/admin/accounts/m1-" + s), Map.of("role", managerRole, "enabled", true, "allDepartments", true)).andExpect(status().isBadRequest());
+        as(manager, put("/api/admin/accounts/" + auth.principal("m1-" + s).id()), Map.of("role", managerRole, "enabled", true, "allDepartments", true)).andExpect(status().isBadRequest());
         // Platform-wide functions need an account over all departments, even when the role grants them.
         as(manager, post("/api/admin/applications"), Map.of("name", "x", "code", "x-" + s)).andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("该功能只对可管理全部部门的管理员开放"));
@@ -119,9 +119,9 @@ class AdminTreeIntegrationTest {
         String department = login("dep1-" + s);
         as(department, post("/api/admin/accounts"), account("leaf", departmentRole, "DEPARTMENT", List.of(d1))).andExpect(status().isForbidden());
 
-        as(top, delete("/api/admin/accounts/m1-" + s), null).andExpect(status().isConflict());
-        as(top, delete("/api/admin/accounts/dep1-" + s), null).andExpect(status().isOk());
-        as(top, delete("/api/admin/accounts/m1-" + s), null).andExpect(status().isOk());
+        as(top, delete("/api/admin/accounts/" + auth.principal("m1-" + s).id()), null).andExpect(status().isConflict());
+        as(top, delete("/api/admin/accounts/" + auth.principal("dep1-" + s).id()), null).andExpect(status().isOk());
+        as(top, delete("/api/admin/accounts/" + auth.principal("m1-" + s).id()), null).andExpect(status().isOk());
     }
 
     @Test void departmentAdministratorsSeeAndChangeOnlyTheirDepartments() throws Exception {
