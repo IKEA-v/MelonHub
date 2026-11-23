@@ -3,7 +3,8 @@ import type { AdminFunctionCode } from './types'
 
 /** Names of the console functions, as in the admin_functions table (V6). */
 export const functionLabels: Record<AdminFunctionCode, string> = {
-  'org.view': '查看部门、用户与软件', 'department.manage': '维护部门', 'user.manage': '维护用户', 'application.manage': '维护软件',
+  'org.view': '查看部门、用户与软件', 'department.manage': '维护部门', 'user.manage': '新建与编辑用户', 'application.manage': '维护软件',
+  'user.delete': '永久删除用户', 'user.credentials': '管理用户登录凭据', 'user.status': '启停用户与强制下线',
   'application.credentials': '管理 API Key 与 Webhook', 'domain.view': '查看授权配置', 'domain.configure': '配置角色与权限',
   'domain.assign': '分配用户角色', 'domain.transfer': '复制配置与导入清单', 'governance.view': '查看审批与复核',
   'request.approve': '审批角色申请', 'review.manage': '发起与处理权限复核', 'audit.view': '查看与校验审计日志',
@@ -11,7 +12,7 @@ export const functionLabels: Record<AdminFunctionCode, string> = {
 }
 
 /** Tag colours of the built-in administrator roles; roles defined in the console use the default colour. */
-const builtinRoleColors: Record<string, string> = { SUPER_ADMIN: 'red', ADMIN: 'blue', APP_ADMIN: 'cyan', AUDITOR: 'default' }
+const builtinRoleColors: Record<string, string> = { SUPER_ADMIN: 'red', ADMIN: 'blue', APP_ADMIN: 'cyan', DEPARTMENT_ADMIN: 'gold', AUDITOR: 'default' }
 export const roleColor = (code: string) => builtinRoleColors[code] ?? 'purple'
 
 const actionGroups: [string, Record<string, string>][] = [
@@ -26,6 +27,7 @@ const actionGroups: [string, Record<string, string>][] = [
     DEPARTMENT_CREATED: '新建部门', DEPARTMENT_UPDATED: '修改部门', DEPARTMENT_DELETED: '删除部门',
     USER_CREATED: '新建用户', USER_UPDATED: '修改用户', USER_ENABLED: '启用用户', USER_DISABLED: '停用用户', USER_DELETED: '删除用户',
     USER_CONTEXTS_REVOKED: '强制用户下线',
+    USER_IDENTITY_PASSWORD_SET: '设置统一身份密码',
   }],
   ['软件与密钥', {
     APPLICATION_CREATED: '接入软件', APPLICATION_UPDATED: '修改软件', APPLICATION_ENABLED: '启用软件', APPLICATION_DISABLED: '停用软件',

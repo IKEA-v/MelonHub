@@ -40,7 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 class AdminTreeIntegrationTest {
     private static final String PASSWORD = "Tree-Test-Passw0rd";
     private static final List<String> DEPARTMENT_FUNCTIONS = List.of("org.view", "domain.view", "domain.configure", "domain.assign",
-            "governance.view", "request.approve", "review.manage", "audit.view", "user.manage");
+            "governance.view", "request.approve", "review.manage", "audit.view", "user.status");
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired AuthService auth;
@@ -138,15 +138,14 @@ class AdminTreeIntegrationTest {
         as(dep, post("/api/admin/roles").param("departmentId", "" + d1).param("applicationId", "" + a1), Map.of("name", "W", "code", "w"))
                 .andExpect(status().isOk());
 
-        // Users: only members of its department are listed; new users go into its department only.
+        // Department staff see their own members and can change the account status within scope.
         as(dep, get("/api/admin/users").param("keyword", s), null).andExpect(jsonPath("$.total").value(2));
         as(dep, get("/api/admin/users").param("departmentId", "" + d2), null).andExpect(status().isForbidden());
         as(dep, post("/api/admin/users"), new Requests.User("New", "new-" + s, "", List.of(d2))).andExpect(status().isForbidden());
-        as(dep, post("/api/admin/users"), new Requests.User("New", "new-" + s, "", List.of(d1))).andExpect(status().isOk());
-        // A user also in another department keeps the profile; only the membership in its own department may change.
+        as(dep, post("/api/admin/users"), new Requests.User("New", "new-" + s, "", List.of(d1))).andExpect(status().isForbidden());
         as(dep, put("/api/admin/users/" + inBoth), new Requests.User("Renamed", "both-" + s, "", List.of(d1, d2))).andExpect(status().isForbidden());
         as(dep, put("/api/admin/users/" + inBoth), new Requests.User("Both " + s, "both-" + s, "", List.of(d1))).andExpect(status().isForbidden());
-        as(dep, put("/api/admin/users/" + inBoth), new Requests.User("Both " + s, "both-" + s, "", List.of(d2))).andExpect(status().isOk());
+        as(dep, put("/api/admin/users/" + inBoth), new Requests.User("Both " + s, "both-" + s, "", List.of(d2))).andExpect(status().isForbidden());
         as(dep, patch("/api/admin/users/" + inD2 + "/status"), Map.of("enabled", false)).andExpect(status().isForbidden());
         as(dep, patch("/api/admin/users/" + inD1 + "/status"), Map.of("enabled", false)).andExpect(status().isOk());
         as(dep, get("/api/admin/users/" + inD2 + "/access"), null).andExpect(status().isForbidden());
@@ -179,6 +178,86 @@ class AdminTreeIntegrationTest {
         var wider = new ArrayList<>(DEPARTMENT_FUNCTIONS);
         wider.addAll(List.of("account.manage", "application.manage", "system.view"));
         as(top, put("/api/admin/admin-roles/" + managerRole), new Requests.AdminRoleUpdate("部门经理", "", wider)).andExpect(status().isOk());
+    }
+
+    @Test void onlySuperAndPlatformAdministratorsCanChangeUserProfilesAndCredentials() throws Exception {
+        String initial = "identity-test-password";
+        String replacement = "updated-identity-test-password";
+        as(top, post("/api/admin/accounts"), account("owner", "DEPARTMENT_ADMIN", "DEPARTMENT", List.of(d1)))
+                .andExpect(status().isOk());
+        as(top, post("/api/admin/accounts"), account("editor", departmentRole, "MANAGER", null))
+                .andExpect(status().isOk());
+        as(top, post("/api/admin/accounts"), account("platform", AdminPrincipal.ADMIN, "MANAGER", null))
+                .andExpect(status().isOk());
+        String owner = login("owner-" + s);
+        String editor = login("editor-" + s);
+        String platform = login("platform-" + s);
+        var newUser = Map.of("name", "Credential test", "externalId", "credential-" + s,
+                "departmentIds", List.of(d1), "identityPassword", initial);
+        as(owner, post("/api/admin/users"), newUser).andExpect(status().isForbidden());
+        as(editor, post("/api/admin/users"), newUser).andExpect(status().isForbidden());
+        as(owner, put("/api/admin/users/" + inD1), new Requests.User("Renamed", "one-" + s, "", List.of(d1)))
+                .andExpect(status().isForbidden());
+        long id = json(as(platform, post("/api/admin/users"), newUser).andExpect(status().isOk())).get("id").asLong();
+        var profile = new Requests.User("Updated", "credential-" + s, "", List.of(d1));
+        as(platform, put("/api/admin/users/" + id), profile).andExpect(status().isOk());
+
+        var login = new Requests.IdentityLogin("credential-" + s, initial, List.of("course-project-management"));
+        String oldSession = "Bearer " + json(mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(login))).andExpect(status().isOk())).get("accessToken").asText();
+        var reset = new Requests.IdentityPassword(replacement);
+        as(editor, put("/api/admin/users/" + id + "/identity-password"), reset).andExpect(status().isForbidden());
+        as(owner, put("/api/admin/users/" + id + "/identity-password"), reset).andExpect(status().isForbidden());
+        as(editor, post("/api/admin/users/import"), new Requests.UserImport(List.of(
+                new Requests.UserImportRow("Outside", "two-" + s, "", List.of("t2-" + s)))))
+                .andExpect(status().isForbidden());
+        as(owner, post("/api/admin/identity/users/import"), new Requests.IdentityUserImport(List.of(
+                new Requests.IdentityUserRow("Outside", "two-" + s, replacement, "", List.of(d2)))))
+                .andExpect(status().isForbidden());
+        as(top, post("/api/admin/admin-roles"), new Requests.AdminRoleCreate("PRIVATE_" + s.toUpperCase(Locale.ROOT),
+                "私密操作", "", List.of("user.manage"))).andExpect(status().isForbidden());
+        as(top, put("/api/admin/admin-roles/" + departmentRole),
+                new Requests.AdminRoleUpdate("私密操作", "", List.of("user.credentials"))).andExpect(status().isForbidden());
+        as(platform, put("/api/admin/users/" + id + "/identity-password"), reset).andExpect(status().isOk());
+        as(oldSession, get("/auth/me"), null).andExpect(status().isUnauthorized());
+
+        var newLogin = new Requests.IdentityLogin("credential-" + s, replacement, List.of("course-project-management"));
+        String newSession = "Bearer " + json(mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content(mapper.writeValueAsString(newLogin))).andExpect(status().isOk())).get("accessToken").asText();
+        as(owner, patch("/api/admin/users/" + inBoth + "/status"), new Requests.Enabled(false)).andExpect(status().isForbidden());
+        as(owner, delete("/api/admin/users/" + id), null).andExpect(status().isForbidden());
+        as(owner, patch("/api/admin/users/" + id + "/status"), new Requests.Enabled(false)).andExpect(status().isOk());
+        as(owner, patch("/api/admin/users/" + id + "/status"), new Requests.Enabled(true)).andExpect(status().isOk());
+        as(newSession, get("/auth/me"), null).andExpect(status().isUnauthorized());
+        as(top, put("/api/admin/users/" + id + "/identity-password"), new Requests.IdentityPassword(initial))
+                .andExpect(status().isOk());
+    }
+
+    @Test void departmentAndSoftwareAdminsUseDifferentScopeAxes() throws Exception {
+        long anotherApp = ((Number) r.application(new Requests.Application("Other App", "other-" + s, ""), "test").get("id")).longValue();
+        as(top, post("/api/admin/accounts"), account("dept-axis", "DEPARTMENT_ADMIN", "DEPARTMENT", List.of(d1)))
+                .andExpect(status().isOk());
+        var software = account("app-axis", "APP_ADMIN", "MANAGER", null);
+        as(top, post("/api/admin/accounts"), software).andExpect(status().isConflict());
+        software.put("allApplications", false);
+        software.put("applicationIds", List.of(a1));
+        as(top, post("/api/admin/accounts"), software).andExpect(status().isOk());
+
+        String departmentToken = login("dept-axis-" + s);
+        as(departmentToken, get("/api/auth/me"), null).andExpect(jsonPath("$.allApplications").value(true))
+                .andExpect(jsonPath("$.allDepartments").value(false));
+        as(departmentToken, post("/api/admin/roles").param("departmentId", "" + d1).param("applicationId", "" + anotherApp),
+                new Requests.Role("Other app role", "other-app", "")).andExpect(status().isOk());
+        as(departmentToken, get("/api/admin/roles").param("departmentId", "" + d2).param("applicationId", "" + a1), null)
+                .andExpect(status().isForbidden());
+
+        String softwareToken = login("app-axis-" + s);
+        as(softwareToken, get("/api/auth/me"), null).andExpect(jsonPath("$.allApplications").value(false))
+                .andExpect(jsonPath("$.allDepartments").value(true));
+        as(softwareToken, post("/api/admin/roles").param("departmentId", "" + d2).param("applicationId", "" + a1),
+                new Requests.Role("Other department role", "other-dept", "")).andExpect(status().isOk());
+        as(softwareToken, get("/api/admin/roles").param("departmentId", "" + d1).param("applicationId", "" + anotherApp), null)
+                .andExpect(status().isForbidden());
     }
 
     @Test void aDepartmentThatLimitsAnAdministratorCannotBeDeleted() throws Exception {

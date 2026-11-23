@@ -16,7 +16,6 @@ const list = useList<Account>(() => get<Account[]>('/admin/accounts'))
 const roles = useList<AdminRoleDefinition>(() => get<AdminRoleDefinition[]>('/admin/admin-roles'))
 const expanded = ref<string[]>([])
 onMounted(async () => { await Promise.all([list.load(), roles.load()]); expanded.value = list.rows.value.map(a => a.username) })
-const roleOptions = computed(() => roles.rows.value.map(r => ({ value: r.code, label: r.name })))
 const roleName = (code: string) => roles.rows.value.find(r => r.code === code)?.name ?? code
 const roleDescription = computed(() => roles.rows.value.find(r => r.code === form.role)?.description)
 const kindLabels: Record<AdminKind, string> = { MANAGER: '管理员', DEPARTMENT: '部门管理员' }
@@ -57,6 +56,13 @@ const form = reactive<{
   allApplications: true, applicationIds: [], enabled: true, password: '', confirm: '',
 })
 const self = computed(() => editing.value?.username === hub.me?.username)
+const departmentRole = computed(() => form.role === 'DEPARTMENT_ADMIN')
+const softwareRole = computed(() => form.role === 'APP_ADMIN')
+const roleOptions = computed(() => roles.rows.value
+  .filter(r => form.kind === 'DEPARTMENT'
+    ? r.code !== 'APP_ADMIN' && !r.functions.some(fn => fn === 'account.manage' || fn === 'role.manage')
+    : r.code !== 'DEPARTMENT_ADMIN')
+  .map(r => ({ value: r.code, label: r.name })))
 /** Accounts a new or moved account can be placed under: the operator itself and the managers it manages. */
 const parentOptions = computed(() => list.rows.value
   .filter(a => a.kind === 'MANAGER' && (a.username === hub.me?.username || a.manageable) && a.username !== editing.value?.username)
@@ -81,7 +87,26 @@ const rules = computed(() => ({
   confirm: editing.value ? [] : [{ required: true, validator: (_: unknown, v: string) => v === form.password ? Promise.resolve() : Promise.reject('两次输入的密码不一致') }],
 }))
 /** A department administrator is always limited to departments. */
-function kindChanged() { if (form.kind === 'DEPARTMENT') form.allDepartments = false }
+function kindChanged() {
+  if (form.kind === 'DEPARTMENT') {
+    form.allDepartments = false
+    if (['ADMIN', 'APP_ADMIN', 'SUPER_ADMIN'].includes(form.role) && roles.rows.value.some(role => role.code === 'DEPARTMENT_ADMIN')) {
+      form.role = 'DEPARTMENT_ADMIN'
+    }
+  } else if (form.role === 'DEPARTMENT_ADMIN') {
+    form.role = 'APP_ADMIN'
+  }
+  applyRoleScope()
+}
+function applyRoleScope() {
+  if (departmentRole.value) {
+    form.allDepartments = false
+    form.allApplications = true
+  } else if (softwareRole.value) {
+    form.allDepartments = true
+    form.allApplications = false
+  }
+}
 function edit(row?: Account, under?: Account) {
   editing.value = row ?? null
   const parentAccount = under ?? (row ? undefined : list.rows.value.find(a => a.username === hub.me?.username))
@@ -241,10 +266,10 @@ const isSelf = (row: Account) => row.username === hub.me?.username
           </a-col>
         </a-row>
         <a-form-item label="角色" name="role" :extra="form.kind === 'DEPARTMENT' ? '部门管理员不能有下级，角色中不能包含管理管理员账号或角色的功能' : roleDescription">
-          <a-select v-model:value="form.role" :options="roleOptions" :loading="roles.loading.value" :disabled="self" />
+          <a-select v-model:value="form.role" :options="roleOptions" :loading="roles.loading.value" :disabled="self" @change="applyRoleScope" />
         </a-form-item>
-        <a-form-item label="可管理的部门" name="allDepartments">
-          <a-radio-group v-model:value="form.allDepartments" :disabled="self">
+        <a-form-item label="可管理的部门" name="allDepartments" :extra="softwareRole ? '软件管理员可在各部门管理所选软件。' : undefined">
+          <a-radio-group v-model:value="form.allDepartments" :disabled="self || softwareRole">
             <a-radio :value="true" :disabled="form.kind === 'DEPARTMENT' || (!!parent && !parent.allDepartments)">全部部门</a-radio>
             <a-radio :value="false">指定部门</a-radio>
           </a-radio-group>
@@ -252,9 +277,10 @@ const isSelf = (row: Account) => row.username === hub.me?.username
         <a-form-item v-if="!form.allDepartments" name="departmentIds">
           <a-select v-model:value="form.departmentIds" mode="multiple" :options="departmentChoices" option-filter-prop="label" placeholder="选择部门" :disabled="self" />
         </a-form-item>
-        <a-form-item label="可管理的软件" name="allApplications" extra="限定软件时，角色、权限、授权、审批、复核、密钥等按软件的操作只能在所选软件中进行。">
-          <a-radio-group v-model:value="form.allApplications" :disabled="self">
-            <a-radio :value="true" :disabled="!!parent && !parent.allApplications">全部软件</a-radio>
+        <a-form-item label="可管理的软件" name="allApplications"
+                     :extra="departmentRole ? '部门管理员可管理所选部门下的全部软件授权。' : '限定软件时，相关授权操作只能在所选软件中进行。'">
+          <a-radio-group v-model:value="form.allApplications" :disabled="self || departmentRole">
+            <a-radio :value="true" :disabled="softwareRole || (!!parent && !parent.allApplications)">全部软件</a-radio>
             <a-radio :value="false">指定软件</a-radio>
           </a-radio-group>
         </a-form-item>

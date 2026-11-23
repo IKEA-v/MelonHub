@@ -4,6 +4,7 @@ import static com.melonhub.rbac.security.AdminFunction.*;
 
 import com.melonhub.rbac.dao.Visibility;
 import com.melonhub.rbac.dto.Requests;
+import com.melonhub.rbac.identity.IdentityService;
 import com.melonhub.rbac.security.AdminAccess;
 import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.RequiresFunction;
@@ -23,7 +24,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/admin")
 public class AdminController {
     private final RbacService r;
-    public AdminController(RbacService r) { this.r = r; }
+    private final IdentityService identity;
+    public AdminController(RbacService r, IdentityService identity) { this.r = r; this.identity = identity; }
 
     private static Visibility visible(AdminPrincipal principal) { return principal.visibility(); }
     private static int page(int page) { return Math.max(1, page); }
@@ -96,28 +98,34 @@ public class AdminController {
         return r.users(keyword, departmentId, enabled, principal.visibleDepartments(), 1, Integer.MAX_VALUE);
     }
     @RequiresFunction(USER_MANAGE)
-    @PostMapping("/users") Object user(@Valid @RequestBody Requests.User b, HttpServletRequest req) {
+    @PostMapping("/users") Object user(@Valid @RequestBody Requests.UserCreate b, HttpServletRequest req) {
         var principal = AdminAccess.of(req);
-        return Map.of("id", r.user(b, null, principal.actor(), principal.visibleDepartments()));
+        return Map.of("id", identity.createUser(b, principal));
+    }
+    @RequiresFunction(USER_CREDENTIALS)
+    @PutMapping("/users/{id}/identity-password") Object userIdentityPassword(@PathVariable long id,
+            @Valid @RequestBody Requests.IdentityPassword b, HttpServletRequest req) {
+        identity.setUserPassword(id, b.password(), AdminAccess.of(req));
+        return ok();
     }
     @RequiresFunction(USER_MANAGE)
     @PutMapping("/users/{id}") Object user(@PathVariable long id, @Valid @RequestBody Requests.User b, HttpServletRequest req) {
         var principal = AdminAccess.of(req);
         return Map.of("id", r.user(b, id, principal.actor(), principal.visibleDepartments()));
     }
-    @RequiresFunction(USER_MANAGE)
+    @RequiresFunction(USER_STATUS)
     @PatchMapping("/users/{id}/status") Object userStatus(@PathVariable long id, @Valid @RequestBody Requests.Enabled b, HttpServletRequest req) {
         var principal = AdminAccess.of(req);
         r.userStatus(id, b.enabled(), principal.actor(), principal.visibleDepartments()); return ok();
     }
-    @RequiresFunction(USER_MANAGE)
+    @RequiresFunction(USER_DELETE)
     @DeleteMapping("/users/{id}") Object deleteUser(@PathVariable long id, HttpServletRequest req) {
         var principal = AdminAccess.of(req);
         r.deleteUser(id, principal.actor(), principal.visibleDepartments()); return ok();
     }
     @RequiresFunction(ORG_VIEW)
     @GetMapping("/users/{id}/access") Object access(@PathVariable long id, HttpServletRequest req) { return r.userAccess(id, visible(AdminAccess.of(req))); }
-    @RequiresFunction(USER_MANAGE)
+    @RequiresFunction(USER_STATUS)
     @DeleteMapping("/users/{id}/contexts") Object revokeContexts(@PathVariable long id, HttpServletRequest req) {
         var principal = AdminAccess.of(req);
         return Map.of("revoked", r.revokeUserContexts(id, principal.actor(), principal.visibleDepartments()));

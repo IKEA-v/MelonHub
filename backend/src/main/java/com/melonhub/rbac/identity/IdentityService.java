@@ -3,8 +3,11 @@ package com.melonhub.rbac.identity;
 import com.melonhub.rbac.dao.IdentityDao;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.exception.ApiException;
+import com.melonhub.rbac.security.AdminFunction;
+import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.Credentials;
 import com.melonhub.rbac.service.RbacService;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -93,7 +96,9 @@ public class IdentityService {
         Instant issuedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         String token = tokenService.issue(credential.username(), systems, issuedAt);
         IdentityTokenService.Claims claims = tokenService.verify(token, COURSE_SYSTEM);
-        identityDao.createSession(Credentials.hash(token), credential.userId(), COURSE_SYSTEM, claims.expiresAt());
+        if (!identityDao.createSession(Credentials.hash(token), credential, COURSE_SYSTEM, claims.expiresAt())) {
+            throw new ApiException(org.springframework.http.HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "账号或密码错误。");
+        }
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("accessToken", token);
         response.put("tokenType", "Bearer");
@@ -262,8 +267,35 @@ public class IdentityService {
     public long provisionUser(Requests.User body, String password, String actor) {
         Long existingId = identityDao.userByExternalId(body.externalId()).map(IdentityDao.UserRow::id).orElse(null);
         long userId = rbacService.user(body, existingId, actor);
-        identityDao.upsertCredential(userId, body.externalId(), passwordEncoder.encode(password));
+        savePassword(userId, body.externalId(), password, actor);
         return userId;
+    }
+
+    @Transactional
+    public long createUser(Requests.UserCreate body, AdminPrincipal principal) {
+        if (body.identityPassword() != null && !principal.canUse(AdminFunction.USER_CREDENTIALS)) {
+            throw ApiException.forbidden("当前账号没有管理用户登录凭据功能");
+        }
+        long userId = rbacService.user(body.profile(), null, principal.actor(), principal.visibleDepartments());
+        if (body.identityPassword() != null) {
+            savePassword(userId, body.externalId(), body.identityPassword(), principal.actor());
+        }
+        return userId;
+    }
+
+    @Transactional
+    public void setUserPassword(long userId, String password, AdminPrincipal principal) {
+        String username = rbacService.lockOwnedUser(userId, principal.visibleDepartments());
+        savePassword(userId, username, password, principal.actor());
+    }
+
+    private void savePassword(long userId, String username, String password, String actor) {
+        if (password.isBlank() || password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw ApiException.bad("统一身份密码不能为空，且 UTF-8 长度不能超过 72 字节");
+        }
+        identityDao.upsertCredential(userId, username, passwordEncoder.encode(password));
+        identityDao.revokeUserSessions(userId);
+        rbacService.audit(actor, "USER_IDENTITY_PASSWORD_SET", username, null, null, "统一身份会话已结束");
     }
 
     private IdentityTokenService.Claims authenticated(String authorization) {

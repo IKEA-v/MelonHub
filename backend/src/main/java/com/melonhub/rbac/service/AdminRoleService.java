@@ -60,6 +60,7 @@ public class AdminRoleService {
         for (String code : codes) {
             AdminFunction function = AdminFunction.of(code);
             if (function == null) throw ApiException.bad("未知的管理功能: " + code);
+            if (function.platformAdminOnly()) throw ApiException.forbidden("该功能仅属于超级管理员和平台管理员角色: " + code);
             if (!actor.has(function)) throw ApiException.forbidden("不能授予自己没有的管理功能: " + code);
             result.add(code);
         }

@@ -16,6 +16,7 @@ public record AdminPrincipal(String username, String displayName, String role, S
     public static final String SUPER_ADMIN = "SUPER_ADMIN";
     public static final String ADMIN = "ADMIN";
     public static final String APP_ADMIN = "APP_ADMIN";
+    public static final String DEPARTMENT_ADMIN = "DEPARTMENT_ADMIN";
     public static final String AUDITOR = "AUDITOR";
     /** Kinds of account in the administrator tree. */
     public static final String MANAGER = "MANAGER";
@@ -24,7 +25,10 @@ public record AdminPrincipal(String username, String displayName, String role, S
     /** Whether the role grants the function. */
     public boolean has(AdminFunction function) { return functions.contains(function); }
     /** Whether the function can be used: platform-wide functions also need an account that manages all departments. */
-    public boolean canUse(AdminFunction function) { return has(function) && (!function.platformWide() || allDepartments); }
+    public boolean canUse(AdminFunction function) {
+        return has(function) && (!function.platformWide() || allDepartments)
+                && (!function.platformAdminOnly() || SUPER_ADMIN.equals(role) || ADMIN.equals(role));
+    }
     public boolean canAccessApplication(long application) { return allApplications || applicationIds.contains(application); }
     public boolean canAccessDepartment(long department) { return allDepartments || departmentIds.contains(department); }
     /** The applications this operator may see, or null when it is not limited. */

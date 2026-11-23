@@ -65,6 +65,10 @@ public final class AdminTree {
         for (var node : nodes.values()) {
             String name = node.username();
             var functions = roleFunctions.getOrDefault(node.role(), Set.of());
+            if (AdminPrincipal.DEPARTMENT_ADMIN.equals(node.role())
+                    && (!AdminPrincipal.DEPARTMENT.equals(node.kind()) || !node.allApplications())) {
+                problems.add(name + "：内置部门管理员角色按部门划定范围，并覆盖这些部门的全部软件");
+            }
             if (AdminPrincipal.DEPARTMENT.equals(node.kind())) {
                 if (node.allDepartments() || node.departments().isEmpty()) problems.add(name + "：部门管理员必须指定所管理的部门");
                 if (functions.stream().anyMatch(ADMINISTRATION::contains)) problems.add(name + "：部门管理员不能拥有管理管理员账号或角色的功能");

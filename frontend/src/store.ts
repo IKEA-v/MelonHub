@@ -7,6 +7,7 @@ import type { AdminFunctionCode, Application, Department, Health, Principal } fr
 const DEPARTMENT = 'melonhub-department', APPLICATION = 'melonhub-application'
 /** Functions that change what every department shares; only accounts over all departments can use them (see AdminFunction). */
 const PLATFORM_WIDE = new Set<AdminFunctionCode>(['department.manage', 'application.manage', 'application.credentials', 'role.manage'])
+export const PLATFORM_ADMIN_ONLY = new Set<AdminFunctionCode>(['user.manage', 'user.credentials'])
 
 export const useHub = defineStore('hub', () => {
   const me = ref<Principal | null>(null)
@@ -29,6 +30,8 @@ export const useHub = defineStore('hub', () => {
   const inDepartment = (id?: number | null) => id === undefined || !!me.value?.allDepartments || (id !== null && !!me.value?.departmentIds.includes(id))
   /** Why the operator may not use the function (in that application and department), or '' when it may. */
   function denial(fn: AdminFunctionCode, application?: number, department?: number | null) {
+    if (PLATFORM_ADMIN_ONLY.has(fn) && me.value?.role !== 'SUPER_ADMIN' && me.value?.role !== 'ADMIN')
+      return '仅超级管理员和平台管理员可执行此操作'
     if (!functions.value.has(fn)) return `当前角色没有“${functionLabels[fn]}”功能`
     if (PLATFORM_WIDE.has(fn) && !me.value?.allDepartments) return `“${functionLabels[fn]}”只对可管理全部部门的管理员开放`
     if (!inApplication(application)) return '当前账号不能管理该软件'
@@ -37,9 +40,9 @@ export const useHub = defineStore('hub', () => {
   }
   /** Whether the signed-in role grants the function and the account may use it in that application and department. */
   function can(fn: AdminFunctionCode, application?: number, department?: number | null) { return !!me.value && !denial(fn, application, department) }
-  /** Disabling, deleting or signing out a user needs a user that belongs only to the operator's departments. */
-  function canManageUser(departments: number[]) {
-    return can('user.manage') && (!!me.value?.allDepartments || (departments.length > 0 && departments.every(d => inDepartment(d))))
+  /** Account-wide changes require control of all the user's departments. */
+  function canManageUser(departments: number[], fn: AdminFunctionCode = 'user.status') {
+    return can(fn) && (!!me.value?.allDepartments || (departments.length > 0 && departments.every(d => inDepartment(d))))
   }
   const canConfigure = computed(() => hasDomain.value && can('domain.configure', applicationId.value, departmentId.value))
   const canAssign = computed(() => hasDomain.value && can('domain.assign', applicationId.value, departmentId.value))
@@ -86,7 +89,7 @@ export const useHub = defineStore('hub', () => {
 
   return {
     me, departments, applications, departmentId, applicationId, health, department, application, hasDomain, domainKey, domainQuery,
-    can, denial, canManageUser, canConfigure, canAssign, canTransfer, departmentName, applicationName, departmentOptions, applicationOptions,
+    can, denial, inDepartment, canManageUser, canConfigure, canAssign, canTransfer, departmentName, applicationName, departmentOptions, applicationOptions,
     setDomain, loadLists, refreshHealth, signIn, signOut,
   }
 })

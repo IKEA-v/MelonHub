@@ -316,17 +316,44 @@ public class IdentityDao {
         entityManager.flush();
     }
 
+    /** 外部标识变化后，统一身份登录名跟随用户资料。 */
+    public void renameCredential(long userId, String username) {
+        entityManager.createQuery("update IdentityCredential c set c.username = :username where c.userId = :userId")
+                .setParameter("username", username)
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.clear();
+    }
+
+    /** 在用户写锁内撤销统一身份会话。 */
+    public void revokeUserSessions(long userId) {
+        entityManager.createQuery("update IdentitySession s set s.revokedAt = :now "
+                        + "where s.user.id = :userId and s.revokedAt is null")
+                .setParameter("now", Instant.now())
+                .setParameter("userId", userId)
+                .executeUpdate();
+        entityManager.clear();
+    }
+
     /**
      * 建立 JWT 会话索引。
      *
      * @param tokenHash JWT 摘要
-     * @param userId 用户主键
+     * @param verified 已校验的凭据
      * @param audience 目标系统
      * @param expiresAt 过期时间
      */
-    public void createSession(String tokenHash, long userId, String audience, Instant expiresAt) {
-        entityManager.persist(new IdentitySession(tokenHash, entityManager.getReference(User.class, userId), audience, expiresAt));
+    public boolean createSession(String tokenHash, CredentialRow verified, String audience, Instant expiresAt) {
+        // 与改密、停用和改名使用相同的用户行锁，防止并发登录用旧凭据建立会话。
+        User user = entityManager.find(User.class, verified.userId(), jakarta.persistence.LockModeType.PESSIMISTIC_READ);
+        if (user == null || !user.isEnabled() || !user.getExternalId().equals(verified.username())) return false;
+        IdentityCredential current = entityManager.find(IdentityCredential.class, verified.userId(),
+                jakarta.persistence.LockModeType.PESSIMISTIC_READ);
+        if (current == null || !current.isEnabled() || !current.getUsername().equals(verified.username())
+                || !current.getPasswordHash().equals(verified.passwordHash())) return false;
+        entityManager.persist(new IdentitySession(tokenHash, user, audience, expiresAt));
         entityManager.flush();
+        return true;
     }
 
     /**

@@ -16,6 +16,9 @@ public enum AdminFunction {
     ORG_VIEW("org.view"),
     DEPARTMENT_MANAGE("department.manage", true),
     USER_MANAGE("user.manage"),
+    USER_STATUS("user.status"),
+    USER_DELETE("user.delete"),
+    USER_CREDENTIALS("user.credentials"),
     APPLICATION_MANAGE("application.manage", true),
     APPLICATION_CREDENTIALS("application.credentials", true),
     DOMAIN_VIEW("domain.view"),
@@ -38,6 +41,7 @@ public enum AdminFunction {
 
     public String code() { return code; }
     public boolean platformWide() { return platformWide; }
+    public boolean platformAdminOnly() { return this == USER_MANAGE || this == USER_CREDENTIALS; }
     /** The function with this code, or null for a code this version does not know. */
     public static AdminFunction of(String code) { return BY_CODE.get(code); }
 }

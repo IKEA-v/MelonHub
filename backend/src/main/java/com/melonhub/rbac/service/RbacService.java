@@ -3,6 +3,7 @@ package com.melonhub.rbac.service;
 import com.melonhub.rbac.cache.PermissionCache;
 import com.melonhub.rbac.dao.ContextDao;
 import com.melonhub.rbac.dao.GovernanceDao;
+import com.melonhub.rbac.dao.IdentityDao;
 import com.melonhub.rbac.dao.RbacDao;
 import com.melonhub.rbac.dao.Visibility;
 import com.melonhub.rbac.dto.Requests;
@@ -44,11 +45,12 @@ public class RbacService {
     private final PermissionCache cache;
     private final WebhookService webhooks;
     private final GovernanceDao governance;
+    private final IdentityDao identity;
     private final TransactionTemplate memberAttempt;
 
-    public RbacService(RbacDao dao, ContextDao contexts, PermissionCache cache, WebhookService webhooks, GovernanceDao governance,
+    public RbacService(RbacDao dao, ContextDao contexts, PermissionCache cache, WebhookService webhooks, GovernanceDao governance, IdentityDao identity,
                        PlatformTransactionManager transactionManager) {
-        this.dao = dao; this.contexts = contexts; this.cache = cache; this.webhooks = webhooks; this.governance = governance;
+        this.dao = dao; this.contexts = contexts; this.cache = cache; this.webhooks = webhooks; this.governance = governance; this.identity = identity;
         // The console calls this without a transaction, so each attempt is a transaction of its own and rolling it
         // back releases its locks. JPA has no savepoints: inside a caller's transaction (the integration tests) the
         // attempts join it, and an attempt that has to retry marks that transaction for rollback.
@@ -230,6 +232,7 @@ public class RbacService {
         String previous = dao.lockUser(id).orElseThrow(() -> ApiException.missing("用户不存在"));
         if (scope != null) {
             var current = dao.lockedUserDepartments(id);
+            if (current.stream().noneMatch(scope::contains)) throw ApiException.forbidden("该用户不在你管理的部门中");
             var outside = current.stream().filter(d -> !scope.contains(d)).collect(Collectors.toSet());
             var wantedOutside = departments.stream().filter(d -> !scope.contains(d)).collect(Collectors.toSet());
             if (!outside.equals(wantedOutside)) throw ApiException.forbidden("不能调整自己管理范围以外的部门成员关系");
@@ -240,6 +243,10 @@ public class RbacService {
         // Business systems identify users by externalId, so changing it must end existing contexts.
         boolean identityChanged = !previous.equals(body.externalId());
         dao.updateUser(id, body.name(), body.externalId(), email, identityChanged);
+        if (identityChanged) {
+            identity.renameCredential(id, body.externalId());
+            identity.revokeUserSessions(id);
+        }
         var removed = dao.lockedUserDepartments(id).stream().filter(d -> !departments.contains(d)).toList();
         for (long dept : removed) dao.removeMembership(id, dept);
         for (long dept : departments) dao.addMembership(id, dept);
@@ -254,9 +261,9 @@ public class RbacService {
     }
     @Transactional public void userStatus(long id, boolean enabled, String actor) { userStatus(id, enabled, actor, null); }
     @Transactional public void userStatus(long id, boolean enabled, String actor, Collection<Long> scope) {
-        String external = dao.lockUser(id).orElseThrow(() -> ApiException.missing("用户不存在"));
-        requireOwned(id, scope);
+        String external = lockOwnedUser(id, scope);
         dao.userStatus(id, enabled);
+        if (!enabled) identity.revokeUserSessions(id);
         cache.touchUser(id);
         webhooks.emitAll(enabled ? "user.enabled" : "user.disabled", Map.of("userId", id, "externalId", external));
         audit(actor, enabled ? "USER_ENABLED" : "USER_DISABLED", external, null, null, enabled ? "" : "原有上下文已失效");
@@ -275,6 +282,12 @@ public class RbacService {
         if (scope == null) return;
         var departments = dao.lockedUserDepartments(user);
         if (departments.isEmpty() || !scope.containsAll(departments)) throw ApiException.forbidden("只能操作完全属于你所管部门的用户");
+    }
+    /** 现有事务内锁定用户，并校验其全部部门归属。 */
+    public String lockOwnedUser(long id, Collection<Long> scope) {
+        String external = dao.lockUser(id).orElseThrow(() -> ApiException.missing("用户不存在"));
+        requireOwned(id, scope);
+        return external;
     }
     public Map<String,Object> userAccess(long id, Visibility visible) {
         var user = dao.user(id).orElseThrow(() -> ApiException.missing("用户不存在"));

@@ -223,7 +223,10 @@ POST /api/v1/access-requests
 | --- | --- | --- |
 | `org.view` | 查看部门、用户与软件 | 部门、用户、软件列表，用户导出与授权详情，全局搜索 |
 | `department.manage` | 维护部门 | 新建、修改、删除部门 |
-| `user.manage` | 维护用户 | 新建、修改、停用、删除用户，批量导入，强制下线 |
+| `user.manage` | 新建与编辑用户 | 新建、编辑、批量导入用户。仅超级管理员和平台管理员 |
+| `user.credentials` | 管理用户登录凭据 | 设置、重置统一身份密码。仅超级管理员和平台管理员 |
+| `user.status` | 启停用户与强制下线 | 停用、启用用户和撤销授权上下文 |
+| `user.delete` | 永久删除用户 | 删除用户 |
 | `application.manage` | 维护软件 | 接入、修改、停用、删除软件，软件限流 |
 | `application.credentials` | 管理 API Key 与 Webhook | 新建、吊销、轮换密钥；登记、修改、删除、测试 Webhook |
 | `domain.view` | 查看授权配置 | 角色、权限、成员、分配、概览、诊断、清单导出、权限反查、即将到期、密钥与 Webhook 列表 |
@@ -238,16 +241,17 @@ POST /api/v1/access-requests
 | `account.manage` | 管理管理员账号 | 第 5.8 节全部接口，查看角色列表 |
 | `role.manage` | 管理管理员角色 | 第 5.13 节全部接口 |
 
-四个内置角色保持原有权限，不能修改或删除：
+内置管理员角色：
 
 | 角色 | 功能 |
 | --- | --- |
-| `SUPER_ADMIN` 超级管理员 | 全部 16 项 |
-| `ADMIN` 平台管理员 | 除 `account.manage`、`role.manage` 外的 14 项 |
-| `APP_ADMIN` 软件管理员 | 5 项查看功能与 `application.credentials`、`domain.configure`、`domain.assign`、`domain.transfer`、`request.approve`、`review.manage` |
+| `SUPER_ADMIN` 超级管理员 | 全部 19 项 |
+| `ADMIN` 平台管理员 | 除 `account.manage`、`role.manage` 外的 17 项 |
+| `APP_ADMIN` 软件管理员 | 跨部门管理指定软件的授权、审批、复核、清单、API Key 和 Webhook |
+| `DEPARTMENT_ADMIN` 部门管理员 | 启停指定部门的用户及管理该部门下所有软件的授权 |
 | `AUDITOR` 审计员 | 5 项查看功能：`org.view`、`domain.view`、`governance.view`、`audit.view`、`system.view` |
 
-升级时原软件管理员账号被设为“指定软件”，其余账号为“全部软件”。软件范围只限制按软件进行的操作（授权域、密钥、Webhook、审批、复核、清单）以及列表中显示的软件和审计记录。管理员角色是平台自身的操作权限，与平台中管理的 RBAC0 业务数据相互独立。
+内置部门管理员的账号类型为 `DEPARTMENT`，配置指定部门和全部软件。内置软件管理员新建或修改范围时，账号类型为 `MANAGER`，配置全部部门和指定软件。自定义角色可按上级授权同时限定部门和软件。管理员的授权域操作受账号范围和角色功能共同约束。
 
 **分级管理（管理员层级与部门范围）**：业务部门保持平级；管理员账号组成一棵树。除顶级账号外，每个账号都有上级（创建它的或指定的管理员），由上级及更上层管理；顶级账号（升级前的超级管理员，以及 `ADMIN_PASSWORD_RESET` 恢复的初始管理员）管理全部账号。账号分两类：`MANAGER` 管理员可以有下级；`DEPARTMENT` 部门管理员必须指定所管部门，不能有下级，其角色不能包含 `account.manage`、`role.manage`。下级永远不超过上级：角色功能是上级角色功能的子集；上级限定了部门（或软件）时，下级的部门（或软件）是其子集。任何会破坏这些规则的修改（新建、修改账号，修改角色功能）在写入前返回 `409` 并说明原因。
 
@@ -255,7 +259,8 @@ POST /api/v1/access-requests
 
 - 部门、用户、审批、复核、审计、即将到期、权限反查、全局搜索只显示所管部门的数据；部门已删除的申请与复核、不限部门的复核、无部门的审计记录只对全部部门的账号可见。
 - 授权域接口要求部门与软件都在范围内，否则 `403`；跨部门复制要求源、目标部门都在范围内；清单导入只能包含所管部门。
-- 新建用户只能放入所管部门；用户同时属于范围外部门时，只能调整其在所管部门的成员关系，不能改资料；停用、删除、强制下线只能针对完全属于所管部门的用户。
+- 超级管理员和平台管理员可以在所管部门新建、编辑用户及管理登录凭据。自定义角色无法获授这两项功能。
+- 停用、删除、强制下线和重置统一身份密码都要求用户的全部所属部门在操作者范围内。
 - `department.manage`、`application.manage`、`application.credentials`、`role.manage` 是平台级功能，以及用户批量导入，只对全部部门的账号开放（`403`“该功能只对可管理全部部门的管理员开放”）。
 
 `/api/auth/login` 与 `/api/auth/me` 另返回 `root`、`kind`、`allDepartments`、`departmentIds`。
@@ -285,15 +290,18 @@ POST /api/v1/access-requests
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/admin/users` | 分页查询；参数 `keyword`（姓名、外部标识或邮箱）、`departmentId`、`enabled`、`page`、`size`；每项含 `departmentIds` |
-| POST、PUT | `/api/admin/users[/{id}]` | `{"name":"张三","externalId":"zhangsan","email":"","departmentIds":[1,2]}`；超级/平台管理员 |
+| POST、PUT | `/api/admin/users[/{id}]` | `{"name":"张三","externalId":"zhangsan","email":"","departmentIds":[1,2]}`。新建时可另传 `identityPassword`，需要同时具备 `user.manage` 和 `user.credentials` |
+| PUT | `/api/admin/users/{id}/identity-password` | 请求体包含 `password`。需要 `user.credentials`，设置成功后撤销用户的统一身份会话 |
 | POST | `/api/admin/users/import` | 批量导入，见下文；超级/平台管理员 |
 | GET | `/api/admin/users/export` | 按 `keyword`、`departmentId`、`enabled` 导出全部匹配用户，返回与列表相同的 `items/total/page/size` 结构，不限于当前页；任意管理员可读 |
-| PATCH | `/api/admin/users/{id}/status` | `{"enabled":false}`；停用后其上下文立即失效 |
-| DELETE | `/api/admin/users/{id}` | 删除用户及其成员关系、角色分配和上下文 |
+| PATCH | `/api/admin/users/{id}/status` | 需要 `user.status`，请求体为 `{"enabled":false}`。停用后上下文和统一身份会话失效 |
+| DELETE | `/api/admin/users/{id}` | 需要 `user.delete`，删除用户及其成员关系、角色分配和上下文 |
 | GET | `/api/admin/users/{id}/access` | 授权详情：用户信息、各授权域的角色与权限、当前有效上下文；按调用者可见的软件过滤 |
-| DELETE | `/api/admin/users/{id}/contexts` | 强制下线该用户的全部上下文，返回 `{"revoked":n}` |
+| DELETE | `/api/admin/users/{id}/contexts` | 需要 `user.status`，强制下线该用户的全部上下文，返回 `{"revoked":n}` |
 
-修改外部标识会使该用户现有的全部上下文失效；移出某个部门会同时删除该用户在该部门的角色分配。
+控制台设置的统一身份密码至少 8 位，UTF-8 长度上限为 72 字节。修改外部标识时，统一身份登录名随之更新，并结束现有上下文和统一身份会话。移出部门时，同步删除用户在该部门的角色分配。
+
+统一身份批量导入接口 `POST /api/admin/identity/users/import` 要求 `user.manage`、`user.credentials` 和全部部门范围。
 
 批量导入一次最多 500 行：
 

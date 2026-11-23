@@ -1,5 +1,6 @@
 /** Console functions; a console page or button is available when the signed-in role grants its function. */
 export type AdminFunctionCode = 'org.view' | 'department.manage' | 'user.manage' | 'application.manage' | 'application.credentials'
+  | 'user.delete' | 'user.credentials' | 'user.status'
   | 'domain.view' | 'domain.configure' | 'domain.assign' | 'domain.transfer' | 'governance.view' | 'request.approve' | 'review.manage'
   | 'audit.view' | 'system.view' | 'account.manage' | 'role.manage'
 export type AdminKind = 'MANAGER' | 'DEPARTMENT'

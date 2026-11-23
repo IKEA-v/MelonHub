@@ -22,7 +22,11 @@ public class AdminFunctionGuard implements HandlerInterceptor {
         if (required == null) throw ApiException.forbidden("该接口未声明所需的管理功能");
         AdminPrincipal principal = AdminAccess.of(request);
         if (Arrays.stream(required.value()).noneMatch(principal::has)) throw ApiException.forbidden("当前管理员角色没有此功能的权限");
-        if (Arrays.stream(required.value()).noneMatch(principal::canUse)) throw ApiException.forbidden("该功能只对可管理全部部门的管理员开放");
+        if (Arrays.stream(required.value()).noneMatch(principal::canUse)) {
+            if (Arrays.stream(required.value()).filter(principal::has).allMatch(AdminFunction::platformAdminOnly))
+                throw ApiException.forbidden("该功能只对超级管理员和平台管理员开放");
+            throw ApiException.forbidden("该功能只对可管理全部部门的管理员开放");
+        }
         return true;
     }
 }

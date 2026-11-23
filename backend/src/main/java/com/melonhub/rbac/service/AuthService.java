@@ -308,6 +308,7 @@ public class AuthService implements ApplicationRunner {
         var departments = allDepartments ? List.<Long>of() : departments(input.departmentIds());
         boolean allApplications = everything(input.allApplications(), input.applicationIds());
         var applications = allApplications ? List.<Long>of() : applications(input.applicationIds());
+        requireSoftwareRoleScope(input.role(), kind, allDepartments, allApplications, applications);
         boolean enabled = !Boolean.FALSE.equals(input.enabled());
         requireConsistent(with(nodes, new AuthDao.AccountNode(input.username(), parent, kind, input.role(), enabled, allDepartments,
                 Set.copyOf(departments), allApplications, Set.copyOf(applications))), roleFunctions);
@@ -350,6 +351,8 @@ public class AuthService implements ApplicationRunner {
                 || current.allApplications() != allApplications || !current.applications().equals(Set.copyOf(applications));
         if (self && (roleChanged || disabling || kindChanged || parentChanged || scopeChanged))
             throw ApiException.bad("不能修改自己的角色、类型、管理范围或上级，也不能停用自己的账号");
+        if (roleChanged || kindChanged || scopeChanged)
+            requireSoftwareRoleScope(input.role(), kind, allDepartments, allApplications, applications);
         if ((roleChanged || disabling) && current.enabled() && AdminPrincipal.SUPER_ADMIN.equals(current.role()) && enabledSuperAdmins(before) <= 1)
             throw ApiException.conflict("至少需要保留一个启用的超级管理员");
         if (disabling && !before.children(username).isEmpty())
@@ -369,6 +372,15 @@ public class AuthService implements ApplicationRunner {
         rbac.audit(actor.actor(), "ACCOUNT_UPDATED", username, null, null,
                 "角色 " + input.role() + (input.enabled() ? "，启用" : "，停用") + (parentChanged ? "，上级改为 " + parent : "") + kindDetail(kind)
                         + scopeDetail(allDepartments, departments, allApplications, applications));
+    }
+
+    /** 内置软件管理员按软件划定范围。未调整范围的旧账号仍可维护显示名和状态。 */
+    private static void requireSoftwareRoleScope(String role, String kind, boolean allDepartments, boolean allApplications,
+                                                 List<Long> applications) {
+        if (AdminPrincipal.APP_ADMIN.equals(role)
+                && (!AdminPrincipal.MANAGER.equals(kind) || !allDepartments || allApplications || applications.isEmpty())) {
+            throw ApiException.conflict("内置软件管理员角色需要指定可管理的软件，部门范围为全部部门");
+        }
     }
 
     @Transactional public void resetPassword(String username, Requests.PasswordReset input, AdminPrincipal actor) {

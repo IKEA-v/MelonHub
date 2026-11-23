@@ -5,7 +5,7 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import { errorText, get, send } from '../api'
 import { attempt, useList } from '../composables'
 import { fmt, roleColor } from '../labels'
-import { useHub } from '../store'
+import { PLATFORM_ADMIN_ONLY, useHub } from '../store'
 import type { AdminFunctionCode, AdminFunctionDefinition, AdminRoleDefinition } from '../types'
 import PageHead from '../components/PageHead.vue'
 import GuardedButton from '../components/GuardedButton.vue'
@@ -111,7 +111,8 @@ async function remove(row: AdminRoleDefinition) {
               <div class="muted">{{ group.name }}</div>
               <a-row>
                 <a-col v-for="fn in group.items" :key="fn.code" :xs="24" :sm="12">
-                  <a-checkbox :value="fn.code" :disabled="!hub.can(fn.code)">{{ fn.name }}</a-checkbox>
+                  <a-checkbox :value="fn.code" :disabled="PLATFORM_ADMIN_ONLY.has(fn.code) || !hub.can(fn.code)"
+                              :title="PLATFORM_ADMIN_ONLY.has(fn.code) ? '此功能专属于超级管理员和平台管理员' : undefined">{{ fn.name }}</a-checkbox>
                 </a-col>
               </a-row>
             </div>

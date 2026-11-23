@@ -55,6 +55,12 @@ public final class Requests {
     public record ApiKey(@NotBlank @Size(max=100) String name, @Min(1) @Max(3650) Integer expiresInDays) {}
     public record User(@NotBlank @Size(max=100) String name, @NotBlank @Size(max=100) String externalId, @Size(max=150) String email,
                        @NotNull @Size(max=100) List<@NotNull @Positive Long> departmentIds) {}
+    public record UserCreate(@NotBlank @Size(max=100) String name, @NotBlank @Size(max=100) String externalId, @Size(max=150) String email,
+                             @NotNull @Size(max=100) List<@NotNull @Positive Long> departmentIds,
+                             @Size(min=8,max=72) String identityPassword) {
+        public User profile() { return new User(name, externalId, email, departmentIds); }
+    }
+    public record IdentityPassword(@NotBlank @Size(min=8,max=72) String password) {}
     public record Role(@NotBlank @Size(max=100) String name, @NotBlank @Pattern(regexp=DOMAIN_CODE) String code, @Size(max=500) String description) {}
     public record Permission(@NotBlank @Size(max=100) String name, @NotBlank @Pattern(regexp=DOMAIN_CODE) String code,
                              @NotBlank @Size(max=100) String resource, @NotBlank @Size(max=64) String action) {}

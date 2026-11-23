@@ -51,25 +51,73 @@ function joinDepartment() {
   edit(user)
   if (!form.departmentIds.includes(props.departmentId!)) form.departmentIds.push(props.departmentId!)
 }
-const form = reactive<{ name: string; externalId: string; email: string; departmentIds: number[] }>({ name: '', externalId: '', email: '', departmentIds: [] })
+const form = reactive<{ name: string; externalId: string; email: string; departmentIds: number[]; identityPassword: string }>({
+  name: '', externalId: '', email: '', departmentIds: [], identityPassword: '',
+})
+const setInitialPassword = ref(false)
+const canSetInitialPassword = computed(() => !editing.value && hub.can('user.credentials'))
+const outsideDepartments = computed(() => editing.value?.departmentIds.filter(id => !hub.inDepartment(id)) ?? [])
+const departmentChoices = computed(() => [
+  ...hub.departmentOptions,
+  ...outsideDepartments.value.map(id => ({ value: id, label: hub.departmentName(id), disabled: true })),
+])
 const identityChanged = computed(() => !!editing.value && form.externalId.trim() !== editing.value.externalId)
 const removedDepartments = computed(() => editing.value?.departmentIds.filter(id => !form.departmentIds.includes(id)) ?? [])
 const rules = {
   name: [{ required: true, whitespace: true, max: 100, message: '请输入姓名（最多 100 字）' }],
   externalId: [{ required: true, whitespace: true, max: 100, message: '请输入外部标识（最多 100 字）' }],
   email: [{ type: 'email', max: 150, message: '邮箱格式不正确' }],
+  identityPassword: identityPasswordRules(),
+}
+function identityPasswordRules() {
+  return [{
+    required: true,
+    validator: (_: unknown, value: string) => {
+      if (!value?.trim() || value.length < 8) return Promise.reject('请输入至少 8 位的登录密码')
+      if (new TextEncoder().encode(value).length > 72) return Promise.reject('登录密码不能超过 72 字节（UTF-8 编码）')
+      return Promise.resolve()
+    },
+  }]
 }
 function edit(row?: User) {
   editing.value = row ?? null
-  Object.assign(form, { name: row?.name ?? '', externalId: row?.externalId ?? '', email: row?.email ?? '', departmentIds: [...(row?.departmentIds ?? (filters.departmentId ? [filters.departmentId] : []))] })
+  const defaultDepartment = filters.departmentId ?? (!hub.me?.allDepartments && hub.me?.departmentIds.length === 1 ? hub.me.departmentIds[0] : undefined)
+  setInitialPassword.value = false
+  Object.assign(form, {
+    name: row?.name ?? '', externalId: row?.externalId ?? '', email: row?.email ?? '', identityPassword: '',
+    departmentIds: [...(row?.departmentIds ?? (defaultDepartment ? [defaultDepartment] : []))],
+  })
   open.value = true
 }
 async function save() {
   await formRef.value?.validate()
   const body = { name: form.name.trim(), externalId: form.externalId.trim(), email: form.email.trim(), departmentIds: form.departmentIds }
-  const ok = await attempt(saving, () => editing.value ? send('PUT', `/admin/users/${editing.value.id}`, body) : send('POST', '/admin/users', body),
+  const identityPassword = canSetInitialPassword.value && setInitialPassword.value ? form.identityPassword : undefined
+  const ok = await attempt(saving, () => editing.value ? send('PUT', `/admin/users/${editing.value.id}`, body)
+    : send('POST', '/admin/users', { ...body, identityPassword }),
     editing.value ? '用户已更新' : '用户已创建')
   if (ok) { open.value = false; table.load(); hub.loadLists().catch(() => {}) }
+}
+
+const passwordTarget = ref<User>(), passwordOpen = ref(false), passwordSaving = ref(false), passwordFormRef = ref<FormInstance>()
+const passwordForm = reactive({ password: '' })
+const passwordRules = { password: identityPasswordRules() }
+function openPassword(row: User) {
+  passwordTarget.value = row
+  passwordForm.password = ''
+  passwordOpen.value = true
+}
+async function savePassword() {
+  await passwordFormRef.value?.validate()
+  const user = passwordTarget.value
+  if (!user || !hub.canManageUser(user.departmentIds, 'user.credentials')) return
+  const ok = await attempt(passwordSaving, () => send('PUT', `/admin/users/${user.id}/identity-password`, { password: passwordForm.password }),
+    '统一身份密码已保存')
+  if (ok) passwordOpen.value = false
+}
+function canOpenUserActions(row: User) {
+  return hub.canManageUser(row.departmentIds) || hub.canManageUser(row.departmentIds, 'user.credentials')
+    || hub.canManageUser(row.departmentIds, 'user.delete')
 }
 
 function toggle(row: User) {
@@ -105,7 +153,8 @@ function remove(row: User) {
   })
 }
 function more(row: User, key: string) {
-  if (key === 'toggle') toggle(row)
+  if (key === 'password') openPassword(row)
+  else if (key === 'toggle') toggle(row)
   else if (key === 'revoke') revoke(row)
   else if (key === 'delete') remove(row)
 }
@@ -187,15 +236,17 @@ async function runImport() {
               <a-divider type="vertical" />
               <GuardedLink fn="user.manage" @click="edit(record)">编辑</GuardedLink>
               <a-divider type="vertical" />
-              <a-dropdown :disabled="!hub.canManageUser(record.departmentIds)">
-                <GuardedLink fn="user.manage" :allowed="hub.canManageUser(record.departmentIds)"
-                             :reason="hub.denial('user.manage') || '该用户还属于你管理范围以外的部门'">更多 <DownOutlined /></GuardedLink>
+              <a-dropdown :disabled="!canOpenUserActions(record)">
+                <GuardedLink fn="user.status" :allowed="canOpenUserActions(record)"
+                             reason="当前账号没有可用于此用户的管理权限">更多 <DownOutlined /></GuardedLink>
                 <template #overlay>
                   <a-menu @click="(e: { key: string }) => more(record, e.key)">
-                    <a-menu-item key="toggle">{{ record.enabled ? '停用' : '启用' }}</a-menu-item>
-                    <a-menu-item key="revoke">强制下线</a-menu-item>
+                    <a-menu-item key="password" :disabled="!hub.canManageUser(record.departmentIds, 'user.credentials')"
+                                 :title="hub.denial('user.credentials') || undefined">设置／重置登录密码</a-menu-item>
+                    <a-menu-item key="toggle" :disabled="!hub.canManageUser(record.departmentIds)">{{ record.enabled ? '停用' : '启用' }}</a-menu-item>
+                    <a-menu-item key="revoke" :disabled="!hub.canManageUser(record.departmentIds)">强制下线</a-menu-item>
                     <a-menu-divider />
-                    <a-menu-item key="delete" danger>删除</a-menu-item>
+                    <a-menu-item key="delete" :disabled="!hub.canManageUser(record.departmentIds, 'user.delete')" danger>删除</a-menu-item>
                   </a-menu>
                 </template>
               </a-dropdown>
@@ -205,19 +256,35 @@ async function runImport() {
       </a-table>
     </a-card>
 
-    <a-modal v-model:open="open" :title="editing ? '编辑用户' : '新建用户'" :confirm-loading="saving" ok-text="保存" destroy-on-close :mask-closable="false" width="560px" @ok="save">
+    <a-modal v-model:open="open" :title="editing ? '编辑用户' : '新建用户'" :confirm-loading="saving" ok-text="保存" destroy-on-close :mask-closable="false" width="560px" @ok="save" @after-close="form.identityPassword = ''">
       <a-form ref="formRef" layout="vertical" :model="form" :rules="rules">
         <a-row :gutter="16">
-          <a-col :xs="24" :sm="12"><a-form-item label="姓名" name="name"><a-input v-model:value="form.name" :maxlength="100" /></a-form-item></a-col>
-          <a-col :xs="24" :sm="12"><a-form-item label="外部标识" name="externalId"><a-input v-model:value="form.externalId" :maxlength="100" placeholder="与业务系统的用户 ID 一致" /></a-form-item></a-col>
+          <a-col :xs="24" :sm="12"><a-form-item label="姓名" name="name"><a-input v-model:value="form.name" :maxlength="100" :disabled="!!outsideDepartments.length" /></a-form-item></a-col>
+          <a-col :xs="24" :sm="12"><a-form-item label="外部标识" name="externalId"><a-input v-model:value="form.externalId" :maxlength="100" :disabled="!!outsideDepartments.length" placeholder="与业务系统的用户 ID 一致" /></a-form-item></a-col>
         </a-row>
-        <a-form-item label="邮箱" name="email"><a-input v-model:value="form.email" :maxlength="150" /></a-form-item>
+        <a-form-item label="邮箱" name="email"><a-input v-model:value="form.email" :maxlength="150" :disabled="!!outsideDepartments.length" /></a-form-item>
         <a-form-item label="所属部门" name="departmentIds">
-          <a-select v-model:value="form.departmentIds" mode="multiple" :options="hub.departmentOptions" placeholder="选择一个或多个部门" option-filter-prop="label" />
+          <a-select v-model:value="form.departmentIds" mode="multiple" :options="departmentChoices" placeholder="选择一个或多个部门" option-filter-prop="label" />
         </a-form-item>
-        <a-alert v-if="identityChanged" type="warning" show-icon message="修改外部标识会使该用户现有的全部权限上下文失效。" class="block-gap" />
+        <a-form-item v-if="canSetInitialPassword">
+          <a-checkbox v-model:checked="setInitialPassword" @change="form.identityPassword = ''">设置统一身份密码</a-checkbox>
+        </a-form-item>
+        <a-form-item v-if="canSetInitialPassword && setInitialPassword" label="统一身份密码" name="identityPassword">
+          <a-input-password v-model:value="form.identityPassword" autocomplete="new-password" :maxlength="72" />
+        </a-form-item>
+        <a-alert v-if="identityChanged" type="warning" show-icon message="修改外部标识会同时更新统一身份登录名，并使现有权限上下文和登录会话失效。" class="block-gap" />
         <a-alert v-if="removedDepartments.length" type="warning" show-icon class="block-gap"
                  :message="`移出部门：${removedDepartments.map(id => hub.departmentName(id)).join('、')}。该用户在这些部门的角色分配会被一并删除。`" />
+      </a-form>
+    </a-modal>
+
+    <a-modal v-model:open="passwordOpen" title="设置／重置登录密码" :confirm-loading="passwordSaving" ok-text="保存"
+             destroy-on-close :mask-closable="false" @ok="savePassword" @after-close="passwordForm.password = ''">
+      <p class="hint">{{ passwordTarget?.name }}（{{ passwordTarget?.externalId }}）的现有统一身份登录会话将在保存后结束。</p>
+      <a-form ref="passwordFormRef" layout="vertical" :model="passwordForm" :rules="passwordRules">
+        <a-form-item label="新登录密码" name="password">
+          <a-input-password v-model:value="passwordForm.password" autocomplete="new-password" :maxlength="72" />
+        </a-form-item>
       </a-form>
     </a-modal>
 
