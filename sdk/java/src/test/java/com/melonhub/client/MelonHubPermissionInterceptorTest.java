@@ -1,5 +1,6 @@
 package com.melonhub.client;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -13,6 +14,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/** 对应需求：R27（见 doc/requirements.md）。 */
 class MelonHubPermissionInterceptorTest {
 
     /** hasPermission 由测试内桩实现，不依赖真实 HTTP。 */
@@ -82,6 +84,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 拦截器在用户具备 @RequirePermission 时放行")
     void allowsWhenPermissionGranted() throws Exception {
         MelonHubPermissionInterceptor interceptor = new MelonHubPermissionInterceptor(stubAuthorizer(true));
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -90,6 +93,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 拦截器对未标注权限注解的方法直接放行")
     void passesThroughWhenNoAnnotation() throws Exception {
         MelonHubPermissionInterceptor interceptor = new MelonHubPermissionInterceptor(stubAuthorizer(false));
         assertThat(interceptor.preHandle(new MockHttpServletRequest(), new MockHttpServletResponse(), handler("open"))).isTrue();
@@ -97,6 +101,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 拦截器在缺少用户身份头时返回 401")
     void rejectsMissingHeadersWith401() throws Exception {
         MelonHubPermissionInterceptor interceptor = new MelonHubPermissionInterceptor(stubAuthorizer(true));
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -116,6 +121,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 拦截器在部门不匹配时返回 409")
     void reportsDepartmentMismatchWith409() throws Exception {
         MelonHubPermissionInterceptor interceptor = new MelonHubPermissionInterceptor(
                 throwingAuthorizer(new DepartmentMismatchException("DEPARTMENT_MISMATCH", "需要切换部门", "r1")));
@@ -126,6 +132,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 拦截器将平台拒绝统一转为 403 不泄漏异常")
     void platformRefusalIsAnsweredWith403InsteadOfEscaping() throws Exception {
         MelonHubPermissionInterceptor interceptor = new MelonHubPermissionInterceptor(
                 throwingAuthorizer(new MelonHubApiException(404, "NOT_FOUND", "用户不存在", "r2")));
@@ -136,6 +143,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 拦截器对错误 JSON 文本做转义防注入破坏")
     void headerTextCannotBreakTheErrorJson() throws Exception {
         MelonHubPermissionInterceptor interceptor = new MelonHubPermissionInterceptor(stubAuthorizer(true));
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -149,6 +157,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 拦截器在无权限时返回 403")
     void rejectsDeniedPermissionWith403() throws Exception {
         MelonHubPermissionInterceptor interceptor = new MelonHubPermissionInterceptor(stubAuthorizer(false));
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -158,6 +167,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @ParameterizedTest
+    @DisplayName("R27 SDK 类级 @RequirePermission 要求身份请求头")
     @MethodSource("classGuardedHandlers")
     void classPermissionRequiresIdentityHeaders(HandlerMethod handler) throws Exception {
         var interceptor = new MelonHubPermissionInterceptor(stubAuthorizer(true));
@@ -167,6 +177,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @ParameterizedTest
+    @DisplayName("R27 SDK 类级 @RequirePermission 拒绝无权用户")
     @MethodSource("classGuardedHandlers")
     void classPermissionDeniesUnauthorizedUsers(HandlerMethod handler) throws Exception {
         var interceptor = new MelonHubPermissionInterceptor(stubAuthorizer(false));
@@ -176,6 +187,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @ParameterizedTest
+    @DisplayName("R27 SDK 类级 @RequirePermission 放行有权用户")
     @MethodSource("classGuardedHandlers")
     void classPermissionAllowsAuthorizedUsers(HandlerMethod handler) throws Exception {
         var interceptor = new MelonHubPermissionInterceptor(stubAuthorizer(true));
@@ -183,6 +195,7 @@ class MelonHubPermissionInterceptorTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 方法级权限注解覆盖类级、类级覆盖父类级")
     void methodPermissionOverridesClassAndClassOverridesSuperclass() throws Exception {
         var checkedPermission = new AtomicReference<String>();
         var authorizer = new MelonHubAuthorizer(new MelonHubClient("http://127.0.0.1:1", "mh_test")) {

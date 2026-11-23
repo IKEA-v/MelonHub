@@ -6,6 +6,7 @@ import com.melonhub.client.dto.ContextView;
 import com.melonhub.client.dto.UserAccessView;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/** 对应需求：R27（见 doc/requirements.md）。 */
 class MelonHubClientTest {
 
     private StubServer stub;
@@ -37,6 +39,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK HTTP 客户端超时覆盖未结束的响应体读取")
     void timeoutIncludesAResponseBodyThatNeverFinishes() throws Exception {
         var headers = new java.util.concurrent.CountDownLatch(1);
         var release = new java.util.concurrent.CountDownLatch(1);
@@ -66,6 +69,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 签发上下文正确解析视图并省略空激活角色")
     void issueContextParsesViewAndOmitsNullRoles() {
         stub.on("POST", "/api/v1/contexts", (ex, body) -> {
             assertThat(ex.getRequestHeaders().getFirst("X-API-Key")).isEqualTo("mh_test");
@@ -83,6 +87,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 查有效权限正确发送 X-Context-Token 请求头")
     void effectiveSendsContextTokenHeader() {
         stub.on("GET", "/api/v1/contexts/effective", (ex, body) -> {
             assertThat(ex.getRequestHeaders().getFirst("X-Context-Token")).isEqualTo("tok");
@@ -92,6 +97,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 批量校验正确解析逐项判定结果")
     void checkParsesDecisions() {
         stub.on("POST", "/api/v1/contexts/check", (ex, body) ->
                 StubServer.Response.json(200, "{\"allowed\":true,\"decisions\":{\"a\":true,\"b\":false},\"contextVersion\":3}"));
@@ -102,6 +108,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 撤销上下文与角色申请端点调用正确")
     void revokeAndAccessRequestsEndpoints() {
         stub.on("DELETE", "/api/v1/contexts", (ex, body) -> StubServer.Response.json(200, "{\"ok\":true}"));
         client.revoke("tok");
@@ -133,6 +140,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 遇 CONTEXT_INVALID 抛出专用子类异常")
     void contextInvalidThrowsSubclass() {
         stub.on("GET", "/api/v1/contexts/effective", (ex, body) ->
                 StubServer.Response.json(401, "{\"code\":\"CONTEXT_INVALID\",\"message\":\"已失效\",\"requestId\":\"r1\"}"));
@@ -145,6 +153,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 异常保留错误码与 X-Request-Id")
     void apiErrorCarriesCodeAndRequestId() {
         stub.on("POST", "/api/v1/contexts", (ex, body) ->
                 StubServer.Response.json(404, "{\"code\":\"NOT_FOUND\",\"message\":\"用户不存在\",\"requestId\":\"r2\"}"));
@@ -157,6 +166,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 遇 503/429 按 Retry-After 退避重试并成功")
     void retriesAfterRetryAfterHeaderThenSucceeds() {
         AtomicInteger calls = new AtomicInteger();
         stub.on("GET", "/api/v1/contexts/effective", (ex, body) -> {
@@ -172,6 +182,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 重试耗尽后抛出异常")
     void retriesExhaustedThrows() {
         stub.on("GET", "/api/v1/contexts/effective", (ex, body) ->
                 new StubServer.Response(503, "{\"code\":\"OVERLOADED\",\"message\":\"过载\"}", Map.of("Retry-After", "0")));
@@ -184,6 +195,7 @@ class MelonHubClientTest {
     }
 
     @Test
+    @DisplayName("R27 SDK 网络异常统一包装为 MelonHubException")
     void networkFailureWrapsInMelonHubException() {
         stub.close();
         assertThatThrownBy(() -> client.effective("tok")).isInstanceOf(MelonHubException.class);
