@@ -7,11 +7,11 @@ import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.AdminAccess;
 import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.RequiresFunction;
-import com.melonhub.rbac.service.AuditSealService;
-import com.melonhub.rbac.service.ConsoleService;
-import com.melonhub.rbac.service.GovernanceService;
-import com.melonhub.rbac.service.RbacService;
-import com.melonhub.rbac.service.WebhookService;
+import com.melonhub.rbac.service.port.AuditSealUseCase;
+import com.melonhub.rbac.service.port.ConsoleUseCase;
+import com.melonhub.rbac.service.port.GovernanceUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
+import com.melonhub.rbac.service.port.WebhookUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -21,14 +21,14 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/admin")
 public class GovernanceController {
-    private final GovernanceService g;
-    private final ConsoleService console;
-    private final WebhookService webhooks;
-    private final AuditSealService auditSeal;
-    private final RbacService rbac;
+    private final GovernanceUseCase g;
+    private final ConsoleUseCase console;
+    private final WebhookUseCase webhooks;
+    private final AuditSealUseCase auditSeal;
+    private final RbacUseCase rbac;
 
-    public GovernanceController(GovernanceService g, ConsoleService console, WebhookService webhooks,
-                                AuditSealService auditSeal, RbacService rbac) {
+    public GovernanceController(GovernanceUseCase g, ConsoleUseCase console, WebhookUseCase webhooks,
+                                AuditSealUseCase auditSeal, RbacUseCase rbac) {
         this.g = g; this.console = console; this.webhooks = webhooks; this.auditSeal = auditSeal; this.rbac = rbac;
     }
 

@@ -1,37 +1,31 @@
 @startuml
-title GET /auth/api-permissions/{operationId} · 时序图
+title GET /auth/api-permissions/{operationId} · 结构化与 DDD 策略对比时序图
 hide footbox
 skinparam shadowing false
 actor "obj: HTTP 调用者" as Caller
 participant "controller: IdentityController" as C
-participant "service: IdentityService" as S
-participant "tokenService: IdentityTokenService" as T
-participant "identityDao: IdentityDao" as D
+participant "useCase: IdentityUseCase\n(Structured / DDD)" as S
+participant "token: IdentityTokenService / Gateway" as T
+participant "domain: CoursePermissionCatalog\n+ IdentityAccountAggregate (仅 DDD)" as D
+participant "store: IdentityDao / RepositoryPort" as R
 activate Caller
 autonumber
 Caller -> C: GET /auth/api-permissions/{operationId}
 activate C
 C -> S: checkApiPermission(authorization, operationId)
 activate S
-S -> T: claims = verify(token, COURSE_SYSTEM)
-activate T
-deactivate T
-S -> D: active = activeSession(tokenHash, now)
-activate D
-deactivate D
-S -> D: user = userByExternalId(claims.subject())
-activate D
-deactivate D
+S -> T: verify(token, COURSE_SYSTEM)
+S -> R: activeSession & userByExternalId
+S -> D: requirePermissionForOperation(operationId)
 alt 未知 operationId
   autonumber stop
   S --> Caller: 404 API_OPERATION_NOT_FOUND
 else 已登记 operationId
   autonumber resume
-  S -> D: permissions = permissions(user.id(), COURSE_SYSTEM)
-  activate D
-  deactivate D
+  S -> R: permissions(user.id, COURSE_SYSTEM)
+  S -> D: hasUiPermission(required)
   autonumber stop
-  S --> C: operationId, allowed
+  S --> C: {operationId, allowed}
   C --> Caller: 200 JSON
 end
 deactivate S

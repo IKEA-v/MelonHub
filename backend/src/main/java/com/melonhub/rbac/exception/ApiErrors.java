@@ -1,5 +1,6 @@
 package com.melonhub.rbac.exception;
 
+import com.melonhub.rbac.service.ddd.domain.value.DomainException;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -46,6 +47,22 @@ public class ApiErrors {
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<Map<String,Object>> api(ApiException e) { return respond(e); }
+
+    @ExceptionHandler(DomainException.class)
+    ResponseEntity<Map<String,Object>> domain(DomainException e) {
+        return respond(toApiException(e));
+    }
+
+    public static ApiException toApiException(DomainException e) {
+        return switch (e.kind()) {
+            case BAD_REQUEST -> new ApiException(HttpStatus.BAD_REQUEST, e.code(), e.getMessage());
+            case UNAUTHORIZED -> new ApiException(HttpStatus.UNAUTHORIZED, e.code(), e.getMessage());
+            case FORBIDDEN -> new ApiException(HttpStatus.FORBIDDEN, e.code(), e.getMessage());
+            case NOT_FOUND -> new ApiException(HttpStatus.NOT_FOUND, e.code(), e.getMessage());
+            case CONFLICT -> new ApiException(HttpStatus.CONFLICT, e.code(), e.getMessage());
+            case BUSY -> ApiException.busy(e.code(), e.getMessage());
+        };
+    }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<Map<String,Object>> integrity(DataIntegrityViolationException e) {

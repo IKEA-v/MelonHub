@@ -1,5 +1,5 @@
 @startuml
-title MelonHub 后端包图
+title MelonHub 双策略后端包图 (Structured / DDD 严格分离)
 skinparam packageStyle rectangle
 skinparam shadowing false
 top to bottom direction
@@ -7,28 +7,41 @@ package "com.melonhub.rbac" {
   package controller
   package security
   package dto
+  package exception
+  package config
+  package "service.port" as port
+  package "service.structured" as structured
+  package "service.ddd" {
+    package application as ddd_app
+    package domain as ddd_domain
+    package infrastructure as ddd_infra
+  }
   package identity
-  package service
   package cache
   package dao
   package repository
   package entity
-  package config
-  package exception
 }
 controller ..> dto
-controller ..> service
-controller ..> identity
+controller ..> port
 controller ..> security
-security ..> service
+security ..> port
 security ..> exception
-identity ..> dao
-identity ..> exception
-service ..> dao
-service ..> cache
-service ..> exception
+config ..> port
+config ..> security
+structured ..|> port
+structured ..> dao
+structured ..> cache
+structured ..> identity
+structured ..> exception
+ddd_app ..|> port
+ddd_app ..> ddd_domain
+ddd_app ..> exception
+ddd_infra ..|> ddd_domain
+ddd_infra ..> dao
+ddd_infra ..> cache
+ddd_infra ..> identity
 dao ..> repository
 dao ..> entity
 repository ..> entity
-config ..> security
 @enduml

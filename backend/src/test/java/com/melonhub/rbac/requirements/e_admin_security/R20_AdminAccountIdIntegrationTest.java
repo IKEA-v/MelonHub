@@ -11,7 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.AuthService;
+import com.melonhub.rbac.service.port.AuthUseCase;
 import java.util.Map;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.DisplayName;
@@ -37,7 +37,7 @@ class R20_AdminAccountIdIntegrationTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
-    @Autowired AuthService auth;
+    @Autowired AuthUseCase auth;
     @Value("${melonhub.admin-username}") String bootstrap;
 
     @Test

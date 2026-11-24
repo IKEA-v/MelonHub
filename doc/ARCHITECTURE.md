@@ -167,10 +167,10 @@ MySQL 是唯一数据源。Redis 只缓存可以随时从 MySQL 重新算出的�
 | 临时授权 | `user_roles.expires_at`、`granted_by`、`granted_at`、`grant_id` | 可逐个角色设置到期时间（或对本次提交的角色统一指定 1–3650 天），未涉及的已有角色保持原期限；到期立即不再计入；`/assignments/expiring` 列出即将到期的分配；维护任务定期删除到期行。每次授予、重新授予或修改期限都会生成新的 `grant_id` |
 | 角色申请与审批 | `access_requests` | 业务系统代员工提交（理由、期望天数），控制台批准（按申请天数、另定天数或永久）或驳回；批准写入分配、使该域上下文失效、替换用户代并发出事件；状态转换用条件更新防止并发重复处理；`pending_role_id` 上的唯一索引保证同一用户对同一角色只有一条待审批申请 |
 | 定期权限复核 | `access_reviews`、`access_review_items` | 发起时对未到期分配拍快照（含 `grant_id`）；关闭前可改标；关闭时一次性执行回收，只删除 `grant_id` 仍相同的那次分配，期间被移除、续期或重新授予的条目记为跳过（`skipped`），未决条目视为保留 |
-| 权限清单 | `GovernanceService.exportManifest/importManifest` | 按软件导出各部门的权限与角色（含角色权限）JSON；导入按编码新建或更新，从不删除，按部门替换域代 |
-| 批量导入用户 | `GovernanceService.importUsers` | 每次最多 500 行，按外部标识新建或更新，按部门编码补齐成员关系；每行单独校验，坏行只记入失败列表，不拒绝整个请求 |
+| 权限清单 | `GovernanceUseCase.exportManifest/importManifest`（`StructuredGovernanceService` / `DddGovernanceService`） | 按软件导出各部门的权限与角色（含角色权限）JSON；导入按编码新建或更新，从不删除，按部门替换域代 |
+| 批量导入用户 | `GovernanceUseCase.importUsers` | 每次最多 500 行，按外部标识新建或更新，按部门编码补齐成员关系；每行单独校验，坏行只记入失败列表，不拒绝整个请求 |
 | 权限反查 | `/permissions/who` | 某权限编码由哪些用户、通过哪些角色持有；按“用户 × 部门”计数，最多返回 500 项并给出总数与 `truncated` |
-| 变更通知 | `webhooks`、`webhook_deliveries`、`WebhookService` | 事务外盒：投递记录与变更在同一事务写入；后台每 5 秒认领最多 20 条到期记录（不超过发送线程池的空余队列），交给独立的发送线程池（`melonhub.webhooks.concurrency`，默认 4 个线程）并行推送，调度线程不等待 HTTP 调用，慢接收方不会拖住审计封存等其他定时任务；停用的 Webhook 不投递但保留队列，重新启用后继续；`SENDING` 状态以 5 分钟租约防止重复与丢失；认领时以尝试次数为条件并加一，写回结果也要求尝试次数不变，租约过期后被重新认领时，旧的投递线程不能覆盖新结果；失败按 1、2、4…60 分钟退避，共 8 次后标记 `FAILED` |
+| 变更通知 | `webhooks`、`webhook_deliveries`、`WebhookUseCase`（`StructuredWebhookService` / `DddWebhookService`） | 事务外盒：投递记录与变更在同一事务写入；后台每 5 秒认领最多 20 条到期记录（不超过发送线程池的空余队列），交给独立的发送线程池（`melonhub.webhooks.concurrency`，默认 4 个线程）并行推送，调度线程不等待 HTTP 调用，慢接收方不会拖住审计封存等其他定时任务；停用的 Webhook 不投递但保留队列，重新启用后继续；`SENDING` 状态以 5 分钟租约防止重复与丢失；认领时以尝试次数为条件并加一，写回结果也要求尝试次数不变，租约过期后被重新认领时，旧的投递线程不能覆盖新结果；失败按 1、2、4…60 分钟退避，共 8 次后标记 `FAILED` |
 
 所有治理写操作都写审计记录，并按第 4.2 节的协议替换代标记。申请与复核条目保存当时的用户姓名、外部标识、角色名称与编码、部门名称（V5）；删除用户、角色或部门时外键置空而不是级联删除，治理历史因此保留。
 
@@ -184,7 +184,7 @@ Flyway 管理表结构。V1 建立 RBAC0、上下文、管理员和审计表；V
 
 `audit_events` 记录配置变更、API Key 与 Webhook 管理、审批与复核、清单与用户导入、管理员登录与账号管理、两步验证变更、上下文创建与注销，包含操作人、对象、域、变更详情和来源 IP；不记录凭据，也不记录每次查询和校验。删除部门或软件时，审计对象为其名称，详情注明编码。
 
-审计哈希链（`AuditSealService`）：后台任务锁定 `audit_seal` 单行，为尚未封存的记录按封存顺序分配 `seal_seq` 并计算 `chain_hash = SHA-256(prev_hash + "|" + 规范化记录)`，多个实例并发运行也只会形成一条链；晚提交的事务即使记录 ID 较小也接在链尾。V5 之后封存的记录使用 v2 规范化形式：每个字段写成“长度:值”，并以顺序号开头，文本在相邻字段之间移动也会改变哈希；更早的记录仍按原形式校验。`audit_seal` 记录链尾（`last_seq`、`last_hash`）和锚点（`anchor_seq`、`anchor_hash`）：保留期清理按链的前缀删除，并把最后删除的那一条记为锚点。`/api/admin/audit/verify` 从指定顺序号重新计算，报告第一处 `LINK_BROKEN`（衔接断开）、`MODIFIED`（内容被改）或 `TAIL_MISSING`（最新记录被删）。它能发现事后修改或删除记录；由于链与数据在同一数据库中，具有数据库写权限的人仍可重算整条链，因此它是防篡改提示，而不是外部合规存证。
+审计哈希链（`AuditSealUseCase`：`StructuredAuditSealService` / `DddAuditSealService` + `AuditHashChainAggregate`）：后台任务锁定 `audit_seal` 单行，为尚未封存的记录按封存顺序分配 `seal_seq` 并计算 `chain_hash = SHA-256(prev_hash + "|" + 规范化记录)`，多个实例并发运行也只会形成一条链；晚提交的事务即使记录 ID 较小也接在链尾。V5 之后封存的记录使用 v2 规范化形式：每个字段写成“长度:值”，并以顺序号开头，文本在相邻字段之间移动也会改变哈希；更早的记录仍按原形式校验。`audit_seal` 记录链尾（`last_seq`、`last_hash`）和锚点（`anchor_seq`、`anchor_hash`）：保留期清理按链的前缀删除，并把最后删除的那一条记为锚点。`/api/admin/audit/verify` 从指定顺序号重新计算，报告第一处 `LINK_BROKEN`（衔接断开）、`MODIFIED`（内容被改）或 `TAIL_MISSING`（最新记录被删）。它能发现事后修改或删除记录；由于链与数据在同一数据库中，具有数据库写权限的人仍可重算整条链，因此它是防篡改提示，而不是外部合规存证。
 
 | 定时任务 | 频率 | 内容 |
 | --- | --- | --- |
@@ -200,27 +200,52 @@ Flyway 管理表结构。V1 建立 RBAC0、上下文、管理员和审计表；V
 
 JDBC 使用 `serverTimezone=SERVER` 读取数据库实际会话时区，避免把云端 UTC 误认为上海时区；JSON 时间带时区信息输出。该配置不修改 Linux、MySQL 全局时区或其他应用的连接。
 
-## 10. 工程分层
+## 10. 工程分层与双策略后端（Structured / DDD）
+
+后端采用**单模块双策略架构**（对标 `CourseProjectMgt`），共享同一套 HTTP 边界（`controller`、`security`、`dto`、`exception`）与共享持久化/缓存基础设施（`dao`、`entity`、`repository`、`cache`、`config`），通过 `service/port/` 的 10 个统一用例端口解耦上层调用与下层实现，并经配置项 `melonhub.backend-strategy`（环境变量 `MELONHUB_BACKEND_STRATEGY`，可选 `structured` 或 `ddd`，默认 `structured`）在 Spring 启动期排他装配整套后端：
+
+```mermaid
+flowchart TB
+    Entry["controller / security / DemoData"] --> Port["service.port (10 个用例端口)"]
+    Port -. "@ConditionalOnProperty=structured" .-> Struct["service.structured (10 个纯过程式服务 + StructuredAdminHierarchyProcedures)"]
+    Port -. "@ConditionalOnProperty=ddd" .-> DddApp["service.ddd.application (10 个薄应用服务)"]
+    Struct --> Infra["dao / entity / repository / cache / identity"]
+    DddApp --> Domain["service.ddd.domain (零框架纯 Java: value / model 聚合根 / repository 端口)"]
+    DddInfra["service.ddd.infrastructure (10 个适配器)"] -. implements .-> Domain
+    DddInfra --> Infra
+```
+
+- **结构化后端（`structured`）**：严格采用事务脚本（Transaction Script）与纯静态过程函数（`StructuredAdminHierarchyProcedures`），直接编排 DAO、事务、缓存失效、外盒发信与审计，**严禁导入任何 `service.ddd` 领域对象**。
+- **DDD 后端（`ddd`）**：严格按六边形/DDD 分层：
+  - `service/ddd/domain/{value,model,repository}`：**100% 零框架纯 Java**（仅导入 `java.*`、`javax.crypto.*` 与自身包），封装 12 个富领域聚合根/模型（`AdminHierarchy`、`AdminRoleAggregate`、`AdminCredentialAccount`、`UserMembershipAggregate`、`DomainAuthorizationAggregate`、`PermissionContextAggregate`、`AccessRequestAggregate`、`AccessReviewAggregate`、`WebhookEndpointAggregate`、`AuditHashChainAggregate`、`IdentityAccountAggregate`、`SystemStatusReport`）、9 个值对象/领域策略（`GrantDuration`、`PasswordPolicy`、`AdminScope`、`IsolationDomain`、`AuditCanonicalizer`、`WebhookSignature`、`CoursePermissionCatalog`、`DomainVisibility`、`DomainException`）及 11 个纯领域仓储/网关端口。
+  - `service/ddd/application/`：10 个薄应用服务协调加锁、事务边界、聚合根决策与端口调用，**严禁直接导入 `*Dao`、`entity`、`repository`、`cache` 或 `service.structured`**。
+  - `service/ddd/infrastructure/`：10 个适配器将领域仓储/网关端口桥接到共享 JPA DAO、Redis `PermissionCache`、`IdentityTokenService`、BCrypt/TOTP 与 JDK `HttpClient`。
+- 上述四条边界规则由 [ArchitectureBoundaryUnitTest](../backend/src/test/java/com/melonhub/rbac/requirements/nfr_reliability/ArchitectureBoundaryUnitTest.java) 在每次单测中自动源码扫描强制守护；双策略完整装配由 [BackendStrategyWiringUnitTest](../backend/src/test/java/com/melonhub/rbac/requirements/nfr_reliability/BackendStrategyWiringUnitTest.java) 验证。
 
 | 路径 | 职责 |
 | --- | --- |
 | `backend/src/main/java/com/melonhub/rbac/RbacApplication.java` | Spring Boot 启动入口，启用定时任务 |
-| `controller/` | `AuthController` 健康、登录、两步验证，`AdminController` 控制台基础配置，`GovernanceController` 审批、复核、Webhook、清单、导入、报表、搜索、系统状态与审计校验，`AccountController` 管理员账号，`BusinessController` 业务 API |
-| `service/` | `RbacService` 配置与授权规则，`ContextService` 上下文与校验，`AuthService` 管理员、两步验证与 API Key 认证，`GovernanceService` 授权治理，`WebhookService` 变更通知与投递，`AuditSealService` 审计哈希链，`ConsoleService` 搜索与状态看板，`MaintenanceService` 定时清理 |
-| `dao/` | `RbacDao`、`ContextDao`、`AuthDao`、`AdminRoleDao`、`GovernanceDao`、`WebhookDao`、`AuditDao`：JPA 查询（JPQL 与 Spring Data 仓库）、悲观锁与带条件的批量更新 |
+| `controller/` | 8 个控制器（`AuthController`、`AdminController`、`AdminRoleController`、`GovernanceController`、`AccountController`、`BusinessController`、`IdentityController`、`IdentityAdminController`），仅依赖 `service.port` |
+| `service/port/` | 10 个共享用例端口接口：`RbacUseCase`、`ContextUseCase`、`AuthUseCase`、`AdminRoleUseCase`、`GovernanceUseCase`、`WebhookUseCase`、`AuditSealUseCase`、`ConsoleUseCase`、`MaintenanceUseCase`、`IdentityUseCase` |
+| `service/structured/` | 纯结构化实现：10 个 `Structured*Service` + 纯静态过程校验集 `StructuredAdminHierarchyProcedures`（`melonhub.backend-strategy=structured`，默认） |
+| `service/ddd/domain/` | 零框架纯 DDD 领域层：`value/`（值对象与领域异常）、`model/`（12 个聚合根与领域模型）、`repository/`（11 个纯 Java 仓储与网关端口） |
+| `service/ddd/application/` | 10 个薄 DDD 应用服务 `Ddd*Service` 与边界异常映射 `DddBoundary`（`melonhub.backend-strategy=ddd`） |
+| `service/ddd/infrastructure/` | 9 个 `Jpa*Adapter` 仓储适配器与 `SpringPlatformGatewaysAdapter` 平台网关适配器（`melonhub.backend-strategy=ddd`） |
+| `identity/` | `IdentityTokenService`：统一身份纯 JDK HS256 JWT 签发与常量时间验签工具 |
+| `dao/` | `RbacDao`、`ContextDao`、`AuthDao`、`AdminRoleDao`、`GovernanceDao`、`WebhookDao`、`AuditDao`、`IdentityDao`：JPA 查询（JPQL 与 Spring Data 仓库）、悲观锁与带条件的批量更新 |
 | `entity/`、`repository/` | JPA 实体（每张表一个，复合主键用 `@EmbeddedId`）与 Spring Data 仓库 |
 | `cache/` | `PermissionCache`：Redis 缓存、失效协议、熔断与恢复 |
-| `dto/` | 请求类型与 Bean Validation 校验 |
-| `security/` | `ApiGuard` 统一鉴权与限流入口，`GlobalRateLimiter` 跨实例限流，`ApplicationRateLimits` 软件限额，`RateLimiter` 实例内令牌桶，`Totp`，`AdminAccess`/`AdminPrincipal` 管理员权限，凭据生成与哈希 |
-| `exception/` | 错误类型与统一错误响应 |
-| `config/` | 数据库目标保护、Redis 配置、可选演示初始化 |
-| `backend/src/main/resources/db/migration/` | Flyway 迁移 V1–V5 |
+| `dto/` | `Requests` 与基于 `CloneFactory` 的 `ContextContracts` 请求/响应契约 |
+| `security/` | `ApiGuard` 统一鉴权、限流与脱敏请求日志入口，`AdminFunctionGuard`，`GlobalRateLimiter`，`ApplicationRateLimits`，`RateLimiter`，`Totp`，`AdminAccess`/`AdminPrincipal`/`AdminFunction`，凭据生成与哈希 |
+| `exception/` | `ApiException` 与 `ApiErrors`（统一处理 `ApiException`、`DomainException` 及数据库/参数异常） |
+| `config/` | `CloudDatabaseConfiguration`、`RedisConfiguration`、`IdentityConfiguration`、`DemoData` |
+| `backend/src/main/resources/db/migration/` | Flyway 迁移 `V1–V16` |
 | `sdk/java/` | Java 业务侧 SDK `melonhub-client`（独立 Maven 工程，见其 README） |
-| `frontend/src/pages/` | 14 个页面：概览、部门、用户、软件接入、角色、权限、用户授权、审批中心、权限复核、权限诊断、审计日志、系统状态、管理员账号、接入指南 |
-| `frontend/src/components/` | 授权域选择、全局搜索、主题切换、密钥与 Webhook 抽屉、复核抽屉、权限持有人抽屉、授权详情、角色成员、两步验证与改密弹窗、页头、空状态、只读提示等共享组件 |
-| `frontend/src/store.ts`、`api.ts`、`theme.ts`、`responsive.ts` | 登录身份、授权域与列表状态；请求封装和会话过期处理；明暗主题与 antd 主题令牌；手机断点（≤768px）与表格卡片布局所需的单元格标签 |
+| `frontend/src/pages/` | 控制台页面与对象内配置抽屉 |
+| `frontend/src/components/` | 授权域选择、全局搜索、主题切换、密钥/Webhook/复核/权限持有人/授权抽屉等共享组件 |
+| `frontend/src/store.ts`、`api.ts`、`theme.ts`、`responsive.ts` | 登录身份、授权域、会话竞态保护、明暗主题与手机断点 |
 | `scripts/` | 一键启停、Redis 容器管理、数据库检查和测试脚本 |
-| `doc/` | 中文使用说明、接口和架构文档 |
+| `doc/` | 中文使用说明、需求文档（`requirements.md`）、接口、架构与 UML 文档 |
 
 后端技术栈为 Spring Boot 3.5.7、Spring Data JPA（Hibernate）、Spring Data Redis（Lettuce）、Bean Validation、Flyway、MySQL Connector/J、Actuator 与 Micrometer Prometheus。前端为 Vue 3.5、TypeScript 5.9、Pinia 3、Vue Router 4、Vite 6 和 Ant Design Vue 4.2。
 

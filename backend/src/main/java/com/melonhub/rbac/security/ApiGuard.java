@@ -3,7 +3,7 @@ package com.melonhub.rbac.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.melonhub.rbac.exception.ApiErrors;
 import com.melonhub.rbac.exception.ApiException;
-import com.melonhub.rbac.service.AuthService;
+import com.melonhub.rbac.service.port.AuthUseCase;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,13 +41,13 @@ public class ApiGuard extends OncePerRequestFilter {
     private static final Pattern REQUEST_ID = Pattern.compile("[A-Za-z0-9._-]{8,64}");
     private static final Logger log = LoggerFactory.getLogger(ApiGuard.class);
 
-    private final AuthService auth;
+    private final AuthUseCase auth;
     private final ObjectMapper json;
     private final GlobalRateLimiter global;
     private final ApplicationRateLimits applicationLimits;
     private final int loginsPerMinute;
 
-    public ApiGuard(AuthService auth, ObjectMapper json, GlobalRateLimiter global, ApplicationRateLimits applicationLimits,
+    public ApiGuard(AuthUseCase auth, ObjectMapper json, GlobalRateLimiter global, ApplicationRateLimits applicationLimits,
                     @Value("${melonhub.rate-limit.login-per-minute:10}") int loginsPerMinute) {
         this.auth = auth;
         this.json = json;

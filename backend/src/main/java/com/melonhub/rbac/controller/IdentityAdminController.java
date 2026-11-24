@@ -5,9 +5,9 @@ import static com.melonhub.rbac.security.AdminFunction.USER_MANAGE;
 
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.exception.ApiException;
-import com.melonhub.rbac.identity.IdentityService;
 import com.melonhub.rbac.security.AdminAccess;
 import com.melonhub.rbac.security.RequiresFunction;
+import com.melonhub.rbac.service.port.IdentityUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
@@ -26,14 +26,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/identity")
 public class IdentityAdminController {
 
-    private final IdentityService identityService;
+    private final IdentityUseCase identityService;
 
     /**
      * 创建统一身份管理控制器。
      *
      * @param identityService 统一身份服务
      */
-    public IdentityAdminController(IdentityService identityService) {
+    public IdentityAdminController(IdentityUseCase identityService) {
         this.identityService = identityService;
     }
 

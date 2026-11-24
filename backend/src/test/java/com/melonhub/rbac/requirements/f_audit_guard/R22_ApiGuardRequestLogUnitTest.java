@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.melonhub.rbac.security.ApiGuard;
 import com.melonhub.rbac.security.ApplicationRateLimits;
 import com.melonhub.rbac.security.GlobalRateLimiter;
-import com.melonhub.rbac.service.AuthService;
+import com.melonhub.rbac.service.port.AuthUseCase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +24,7 @@ class R22_ApiGuardRequestLogUnitTest {
     @Test
     @DisplayName("R22 / MH-06 管理菜单请求记录同一请求编号且省略凭据和用户输入")
     void recordsMenuRequestWithoutCredentialsOrUserInput(CapturedOutput output) throws Exception {
-        ApiGuard guard = new ApiGuard(mock(AuthService.class), new ObjectMapper(),
+        ApiGuard guard = new ApiGuard(mock(AuthUseCase.class), new ObjectMapper(),
                 mock(GlobalRateLimiter.class), mock(ApplicationRateLimits.class), 10);
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/accounts/42");
         request.addHeader("X-Request-Id", "menu-test-1234");

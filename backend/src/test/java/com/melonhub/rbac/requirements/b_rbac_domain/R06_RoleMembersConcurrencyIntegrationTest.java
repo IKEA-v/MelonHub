@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -30,7 +30,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @ContextConfiguration(initializers = CloudTestDatabaseGuard.class)
 class R06_RoleMembersConcurrencyIntegrationTest {
     private static final String ACTOR = "race-test";
-    @Autowired RbacService r;
+    @Autowired RbacUseCase r;
     @Autowired JdbcTemplate db;
     @Autowired PlatformTransactionManager transactions;
 

@@ -4,11 +4,11 @@ import static com.melonhub.rbac.security.AdminFunction.*;
 
 import com.melonhub.rbac.dao.Visibility;
 import com.melonhub.rbac.dto.Requests;
-import com.melonhub.rbac.identity.IdentityService;
 import com.melonhub.rbac.security.AdminAccess;
 import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.RequiresFunction;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.IdentityUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
@@ -23,9 +23,9 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
-    private final RbacService r;
-    private final IdentityService identity;
-    public AdminController(RbacService r, IdentityService identity) { this.r = r; this.identity = identity; }
+    private final RbacUseCase r;
+    private final IdentityUseCase identity;
+    public AdminController(RbacUseCase r, IdentityUseCase identity) { this.r = r; this.identity = identity; }
 
     private static Visibility visible(AdminPrincipal principal) { return principal.visibility(); }
     private static int page(int page) { return Math.max(1, page); }

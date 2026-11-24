@@ -6,8 +6,8 @@ import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dao.WebhookDao;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.RbacService;
-import com.melonhub.rbac.service.WebhookService;
+import com.melonhub.rbac.service.port.RbacUseCase;
+import com.melonhub.rbac.service.port.WebhookUseCase;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,8 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 class R15_WebhookLeaseDaoIntegrationTest {
     @Autowired JdbcTemplate db;
     @Autowired WebhookDao dao;
-    @Autowired RbacService r;
-    @Autowired WebhookService webhooks;
+    @Autowired RbacUseCase r;
+    @Autowired WebhookUseCase webhooks;
     long hook;
 
     @BeforeEach void setUp() {

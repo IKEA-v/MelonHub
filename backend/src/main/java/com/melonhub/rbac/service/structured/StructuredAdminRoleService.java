@@ -1,4 +1,9 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.AdminRoleUseCase;
+import com.melonhub.rbac.service.port.AuthUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.melonhub.rbac.dao.AdminRoleDao;
 import com.melonhub.rbac.dto.Requests;
@@ -18,12 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
  * can only put functions it holds itself into a role, so editing roles never grants more than the editor has.
  */
 @Service
-public class AdminRoleService {
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredAdminRoleService implements AdminRoleUseCase {
     private final AdminRoleDao dao;
-    private final RbacService rbac;
-    private final AuthService accounts;
+    private final RbacUseCase rbac;
+    private final AuthUseCase accounts;
 
-    public AdminRoleService(AdminRoleDao dao, RbacService rbac, AuthService accounts) { this.dao = dao; this.rbac = rbac; this.accounts = accounts; }
+    public StructuredAdminRoleService(AdminRoleDao dao, RbacUseCase rbac, AuthUseCase accounts) { this.dao = dao; this.rbac = rbac; this.accounts = accounts; }
 
     public List<Map<String,Object>> functions() { return dao.functions(); }
     public List<Map<String,Object>> roles() { return dao.roles(); }

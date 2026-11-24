@@ -10,9 +10,9 @@ import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.AuthService;
-import com.melonhub.rbac.service.GovernanceService;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.AuthUseCase;
+import com.melonhub.rbac.service.port.GovernanceUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -45,9 +45,9 @@ class R19_AdminTreeIntegrationTest {
             "governance.view", "request.approve", "review.manage", "audit.view", "user.status");
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
-    @Autowired AuthService auth;
-    @Autowired RbacService r;
-    @Autowired GovernanceService g;
+    @Autowired AuthUseCase auth;
+    @Autowired RbacUseCase r;
+    @Autowired GovernanceUseCase g;
     @Value("${melonhub.admin-username}") String bootstrap;
 
     String s, top, managerRole, departmentRole;

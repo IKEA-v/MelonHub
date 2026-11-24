@@ -14,8 +14,8 @@ import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.AuthService;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.AuthUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -61,8 +61,8 @@ class R31_ApiContractIntegrationTest {
     @Autowired MockMvc mvc;
     @Value("${melonhub.admin-username}") String bootstrap;
     @Autowired ObjectMapper mapper;
-    @Autowired RbacService r;
-    @Autowired AuthService auth;
+    @Autowired RbacUseCase r;
+    @Autowired AuthUseCase auth;
 
     private final Map<String, JsonNode> shapes = new TreeMap<>();
     private String bearer, apiKey;

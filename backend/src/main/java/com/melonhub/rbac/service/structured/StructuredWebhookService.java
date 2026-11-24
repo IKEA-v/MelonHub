@@ -1,4 +1,8 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.RbacUseCase;
+import com.melonhub.rbac.service.port.WebhookUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,14 +48,15 @@ import org.springframework.transaction.annotation.Transactional;
  * then pushed with an HMAC-SHA-256 signature and exponential backoff; receivers never trust unsigned payloads.
  */
 @Service
-public class WebhookService {
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredWebhookService implements WebhookUseCase {
     public static final List<String> EVENT_TYPES = List.of(
             "user.enabled", "user.disabled", "user.deleted", "user.roles.changed", "user.roles.expired",
             "user.updated", "user.contexts.revoked", "role.enabled", "role.disabled", "role.deleted", "role.permissions.changed",
             "permission.updated", "permission.deleted",
             "application.enabled", "application.disabled", "apikey.revoked",
             "access.approved", "access.rejected", "review.closed");
-    private static final Logger log = LoggerFactory.getLogger(WebhookService.class);
+    private static final Logger log = LoggerFactory.getLogger(StructuredWebhookService.class);
     private static final int BATCH = 20;
 
     private final WebhookDao dao;
@@ -64,7 +69,7 @@ public class WebhookService {
     /** Slow receivers occupy these threads only, never the scheduler shared with sealing and cache recovery. */
     private final ThreadPoolExecutor senders;
 
-    public WebhookService(WebhookDao dao, RbacDao rbacDao, ObjectMapper json,
+    public StructuredWebhookService(WebhookDao dao, RbacDao rbacDao, ObjectMapper json,
                           @Value("${melonhub.webhooks.delivery:true}") boolean deliveryEnabled,
                           @Value("${melonhub.webhooks.timeout-millis:5000}") int timeoutMillis,
                           @Value("${melonhub.webhooks.max-attempts:8}") int maxAttempts,
@@ -82,7 +87,7 @@ public class WebhookService {
         this.senders.allowCoreThreadTimeOut(true);
     }
 
-    @PreDestroy void stopSenders() throws InterruptedException {
+    @Override @PreDestroy public void stopSenders() throws InterruptedException {
         senders.shutdown();
         senders.awaitTermination(timeoutMillis + 1000L, TimeUnit.MILLISECONDS);
     }
@@ -115,7 +120,7 @@ public class WebhookService {
         dao.delete(id);
         audit(actor, "WEBHOOK_DELETED", (String) existing.get("name"), number(existing.get("applicationId")), (String) existing.get("url"));
     }
-    public Map<String,Object> deliveries(long id, int page, int size) { webhook(id); return RbacService.page(dao.deliveries(id, page, size), page, size); }
+    public Map<String,Object> deliveries(long id, int page, int size) { webhook(id); return page(dao.deliveries(id, page, size), page, size); }
     @Transactional public void test(long id, String actor) {
         var hook = webhook(id);
         if (!Boolean.TRUE.equals(hook.get("enabled"))) throw ApiException.conflict("Webhook 已停用，请先启用");
@@ -247,5 +252,6 @@ public class WebhookService {
     private void audit(String actor, String action, String target, long app, String detail) {
         rbacDao.audit(actor, action, target, null, app, detail, ClientAddress.current());
     }
+    private static Map<String,Object> page(RbacDao.Page p, int number, int size) { return RbacUseCase.page(p.items(), p.total(), number, size); }
     private static long number(Object value) { return ((Number) value).longValue(); }
 }

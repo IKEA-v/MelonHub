@@ -6,7 +6,7 @@ import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.exception.ApiException;
 import com.melonhub.rbac.security.AdminAccess;
 import com.melonhub.rbac.security.RequiresFunction;
-import com.melonhub.rbac.service.AuthService;
+import com.melonhub.rbac.service.port.AuthUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/admin/accounts")
 public class AccountController {
-    private final AuthService auth;
-    public AccountController(AuthService auth) { this.auth = auth; }
+    private final AuthUseCase auth;
+    public AccountController(AuthUseCase auth) { this.auth = auth; }
 
     private static long accountId(long id) {
         if (id < 1) throw ApiException.bad("管理员 ID 必须为正整数");
