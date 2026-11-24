@@ -1,33 +1,38 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.AuditSealUseCase;
+import com.melonhub.rbac.service.port.AuthUseCase;
+import com.melonhub.rbac.service.port.GovernanceUseCase;
+import com.melonhub.rbac.service.port.MaintenanceUseCase;
 
 import com.melonhub.rbac.dao.ContextDao;
 import com.melonhub.rbac.dao.WebhookDao;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.dao.DataAccessException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /** Removes expired rows in small batches so cleanup never holds long locks on hot tables. */
 @Service
-@ConditionalOnProperty(name = "melonhub.maintenance.enabled", havingValue = "true", matchIfMissing = true)
-public class MaintenanceService {
-    private static final Logger log = LoggerFactory.getLogger(MaintenanceService.class);
+@ConditionalOnExpression("'${melonhub.maintenance.enabled:true}'.equalsIgnoreCase('true') and '${melonhub.backend-strategy:structured}'.equalsIgnoreCase('structured')")
+public class StructuredMaintenanceService implements MaintenanceUseCase {
+    private static final Logger log = LoggerFactory.getLogger(StructuredMaintenanceService.class);
     private static final int BATCH = 5000;
     private static final int EXPIRY_BATCH = 500;
     private static final int MAX_BATCHES = 200;
 
     private final ContextDao contexts;
-    private final AuthService auth;
-    private final GovernanceService governance;
+    private final AuthUseCase auth;
+    private final GovernanceUseCase governance;
     private final WebhookDao webhooks;
-    private final AuditSealService audit;
+    private final AuditSealUseCase audit;
     private final int auditDays;
     private final int webhookDays;
 
-    public MaintenanceService(ContextDao contexts, AuthService auth, GovernanceService governance, WebhookDao webhooks, AuditSealService audit,
+    public StructuredMaintenanceService(ContextDao contexts, AuthUseCase auth, GovernanceUseCase governance, WebhookDao webhooks, AuditSealUseCase audit,
                               @Value("${melonhub.retention.audit-days:180}") int auditDays,
                               @Value("${melonhub.retention.webhook-days:30}") int webhookDays) {
         this.contexts = contexts; this.auth = auth; this.governance = governance; this.webhooks = webhooks; this.audit = audit;
@@ -62,7 +67,7 @@ public class MaintenanceService {
     public void purgeAudit() {
         if (auditDays <= 0) return;
         try {
-            int removed = drain(AuditSealService.PURGE_BATCH, () -> audit.purge(auditDays));
+            int removed = drain(AuditSealUseCase.PURGE_BATCH, () -> audit.purge(auditDays));
             if (removed > 0) log.info("Purged {} audit events older than {} days", removed, auditDays);
         } catch (DataAccessException e) {
             log.warn("Audit retention cleanup skipped: {}", e.getClass().getSimpleName());

@@ -1,4 +1,9 @@
-package com.melonhub.rbac.identity;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.identity.IdentityTokenService;
+import com.melonhub.rbac.service.port.IdentityUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.melonhub.rbac.dao.IdentityDao;
 import com.melonhub.rbac.dao.RbacDao;
@@ -7,7 +12,6 @@ import com.melonhub.rbac.exception.ApiException;
 import com.melonhub.rbac.security.AdminFunction;
 import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.RbacService;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -28,7 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 统一身份认证与课程系统权限查询应用服务。
  */
 @Service
-public class IdentityService {
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredIdentityService implements IdentityUseCase {
 
     private static final String COURSE_SYSTEM = "course-project-management";
     private static final String COURSE_AUDIT_VIEW = "AV";
@@ -57,7 +62,7 @@ public class IdentityService {
     );
 
     private final IdentityDao identityDao;
-    private final RbacService rbacService;
+    private final RbacUseCase rbacService;
     private final PasswordEncoder passwordEncoder;
     private final IdentityTokenService tokenService;
 
@@ -69,9 +74,9 @@ public class IdentityService {
      * @param passwordEncoder 密码编码器
      * @param tokenService JWT 服务
      */
-    public IdentityService(
+    public StructuredIdentityService(
             IdentityDao identityDao,
-            RbacService rbacService,
+            RbacUseCase rbacService,
             PasswordEncoder passwordEncoder,
             IdentityTokenService tokenService
     ) {

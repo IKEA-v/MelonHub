@@ -1,4 +1,8 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.RbacUseCase;
+import com.melonhub.rbac.service.port.WebhookUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.melonhub.rbac.cache.PermissionCache;
 import com.melonhub.rbac.dao.ContextDao;
@@ -35,7 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-public class RbacService {
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredRbacService implements RbacUseCase {
     public static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final int MAX_ACTIVE_KEYS = 10;
     private static final int MEMBER_ATTEMPTS = 3;
@@ -43,12 +48,12 @@ public class RbacService {
     private final RbacDao dao;
     private final ContextDao contexts;
     private final PermissionCache cache;
-    private final WebhookService webhooks;
+    private final WebhookUseCase webhooks;
     private final GovernanceDao governance;
     private final IdentityDao identity;
     private final TransactionTemplate memberAttempt;
 
-    public RbacService(RbacDao dao, ContextDao contexts, PermissionCache cache, WebhookService webhooks, GovernanceDao governance, IdentityDao identity,
+    public StructuredRbacService(RbacDao dao, ContextDao contexts, PermissionCache cache, WebhookUseCase webhooks, GovernanceDao governance, IdentityDao identity,
                        PlatformTransactionManager transactionManager) {
         this.dao = dao; this.contexts = contexts; this.cache = cache; this.webhooks = webhooks; this.governance = governance; this.identity = identity;
         // The console calls this without a transaction, so each attempt is a transaction of its own and rolling it
@@ -82,13 +87,8 @@ public class RbacService {
         if (!dao.scopedExists(table, id, dept, app)) throw ApiException.forbidden("关联记录不属于当前隔离域");
     }
 
-    public static Map<String,Object> page(RbacDao.Page page, int number, int size) {
-        var result = new LinkedHashMap<String,Object>();
-        result.put("items", page.items());
-        result.put("total", page.total());
-        result.put("page", number);
-        result.put("size", size);
-        return result;
+    private static Map<String,Object> page(RbacDao.Page page, int number, int size) {
+        return RbacUseCase.page(page.items(), page.total(), number, size);
     }
 
     // ---- departments ----
@@ -248,11 +248,25 @@ public class RbacService {
             identity.revokeUserSessions(id);
         }
         var removed = dao.lockedUserDepartments(id).stream().filter(d -> !departments.contains(d)).toList();
+        var removedAssignments = dao.userRoleAssignments(id, removed);
+        dao.removeUserRolesInDepartments(id, removed);
         for (long dept : removed) dao.removeMembership(id, dept);
         for (long dept : departments) dao.addMembership(id, dept);
         dao.clearInactiveDepartment(id);
         cache.touchUser(id);
         webhooks.emitAll("user.updated", Map.of("userId", id, "externalId", body.externalId()));
+        for (var group : removedAssignments.stream().collect(java.util.stream.Collectors.groupingBy(row ->
+                number(row.get("department_id")) + ":" + number(row.get("application_id")), LinkedHashMap::new, Collectors.toList())).entrySet()) {
+            var first = group.getValue().get(0);
+            long dept = number(first.get("department_id"));
+            long app = number(first.get("application_id"));
+            var roleIds = group.getValue().stream().map(row -> number(row.get("role_id"))).toList();
+            var roleCodes = group.getValue().stream().map(row -> String.valueOf(row.get("role_code"))).toList();
+            contexts.revokeDomain(id, dept, app);
+            webhooks.emit(app, "user.roles.changed", Map.of("userId", id, "externalId", body.externalId(),
+                    "departmentId", dept, "removed", roleIds.size()));
+            audit(actor, "USER_ROLES_UPDATED", body.externalId(), dept, app, "移除角色 " + String.join(", ", roleCodes));
+        }
         var detail = new ArrayList<String>();
         if (identityChanged) detail.add("外部标识由 " + previous + " 变更，原有上下文已失效");
         if (!removed.isEmpty()) detail.add("移出部门 " + removed.size() + " 个，相关角色已解除");

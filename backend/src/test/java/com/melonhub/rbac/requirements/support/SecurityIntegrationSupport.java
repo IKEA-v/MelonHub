@@ -9,8 +9,8 @@ import com.melonhub.rbac.dao.AuthDao;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.AdminPrincipal;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.AuthService;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.AuthUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -41,8 +41,8 @@ public abstract class SecurityIntegrationSupport {
 
     @Autowired protected MockMvc mvc;
     @Autowired protected ObjectMapper mapper;
-    @Autowired protected RbacService r;
-    @Autowired protected AuthService auth;
+    @Autowired protected RbacUseCase r;
+    @Autowired protected AuthUseCase auth;
     @Autowired protected AuthDao authDao;
     @Autowired protected JdbcTemplate db;
     @Value("${melonhub.admin-username}") protected String bootstrap;

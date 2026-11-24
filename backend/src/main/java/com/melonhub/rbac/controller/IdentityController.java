@@ -2,7 +2,7 @@ package com.melonhub.rbac.controller;
 
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.exception.ApiException;
-import com.melonhub.rbac.identity.IdentityService;
+import com.melonhub.rbac.service.port.IdentityUseCase;
 import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -24,14 +24,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/auth")
 public class IdentityController {
 
-    private final IdentityService identityService;
+    private final IdentityUseCase identityService;
 
     /**
      * 创建统一身份控制器。
      *
      * @param identityService 统一身份服务
      */
-    public IdentityController(IdentityService identityService) {
+    public IdentityController(IdentityUseCase identityService) {
         this.identityService = identityService;
     }
 

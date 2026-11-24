@@ -1,4 +1,7 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.AuditSealUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.melonhub.rbac.dao.AuditDao;
 import java.nio.charset.StandardCharsets;
@@ -21,8 +24,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * anchor that retention cleanup leaves behind).
  */
 @Service
-public class AuditSealService {
-    private static final Logger log = LoggerFactory.getLogger(AuditSealService.class);
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredAuditSealService implements AuditSealUseCase {
+    private static final Logger log = LoggerFactory.getLogger(StructuredAuditSealService.class);
     private static final int BATCH = 500;
     private static final int MAX_BATCHES = 40;
     public static final int PURGE_BATCH = 5000;
@@ -32,7 +36,7 @@ public class AuditSealService {
     private final TransactionTemplate snapshot;
     private final boolean scheduled;
 
-    public AuditSealService(AuditDao dao, PlatformTransactionManager transactionManager,
+    public StructuredAuditSealService(AuditDao dao, PlatformTransactionManager transactionManager,
                             @Value("${melonhub.maintenance.enabled:true}") boolean scheduled) {
         this.dao = dao;
         this.transactions = new TransactionTemplate(transactionManager);

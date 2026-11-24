@@ -1,7 +1,7 @@
 package com.melonhub.rbac.config;
 
 import com.melonhub.rbac.dto.Requests;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.RbacUseCase;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,9 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @Order(10)
 public class DemoData implements ApplicationRunner {
-    private final RbacService r;
+    private final RbacUseCase r;
     private final boolean enabled;
-    public DemoData(RbacService r, @Value("${melonhub.seed-demo}") boolean enabled) { this.r = r; this.enabled = enabled; }
+    public DemoData(RbacUseCase r, @Value("${melonhub.seed-demo}") boolean enabled) { this.r = r; this.enabled = enabled; }
 
     @Override @Transactional public void run(ApplicationArguments args) {
         if (!enabled || !r.departments(null).isEmpty()) return;

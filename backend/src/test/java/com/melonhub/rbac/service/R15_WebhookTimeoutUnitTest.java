@@ -4,8 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.melonhub.rbac.cache.PermissionCache;
 import com.melonhub.rbac.dao.RbacDao;
 import com.melonhub.rbac.dao.WebhookDao;
+import com.melonhub.rbac.identity.IdentityTokenService;
+import com.melonhub.rbac.service.ddd.application.DddWebhookService;
+import com.melonhub.rbac.service.ddd.infrastructure.JpaRbacRepositoryAdapter;
+import com.melonhub.rbac.service.ddd.infrastructure.JpaWebhookRepositoryAdapter;
+import com.melonhub.rbac.service.ddd.infrastructure.SpringPlatformGatewaysAdapter;
+import com.melonhub.rbac.service.port.WebhookUseCase;
+import com.melonhub.rbac.service.structured.StructuredWebhookService;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.time.Duration;
@@ -14,15 +22,20 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * 对应需求：R15（见 doc/requirements.md）。
- * 因需调用包级可见的 {@link WebhookService#stopSenders()} 关闭测试线程池，本类保留在 {@code service} 同包下。
+ * 同时校验结构化与 DDD 双策略下 Webhook 请求超时覆盖含响应体读取的完整周期。
  */
 class R15_WebhookTimeoutUnitTest {
+    @ParameterizedTest(name = "[{0}]")
+    @ValueSource(strings = { "structured", "ddd" })
     @DisplayName("R15 Webhook 请求超时覆盖含响应体读取的完整周期")
-    @Test void responseHeadersDoNotEndTheDeliveryDeadline() throws Exception {
+    void responseHeadersDoNotEndTheDeliveryDeadline(String strategy) throws Exception {
         var headers = new CountDownLatch(1);
         var release = new CountDownLatch(1);
         var server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -40,7 +53,19 @@ class R15_WebhookTimeoutUnitTest {
         when(dao.dueDeliveries(20)).thenReturn(List.of(Map.of("id", 1L, "attempts", 0, "payload", "{}", "secret", "test-secret",
                 "eventType", "user.disabled", "eventId", "test", "url", "http://127.0.0.1:" + server.getAddress().getPort() + "/")));
         when(dao.claim(1L, 0)).thenReturn(1);
-        var service = new WebhookService(dao, mock(RbacDao.class), new ObjectMapper(), true, 500, 8, 1);
+        WebhookUseCase service;
+        if ("ddd".equals(strategy)) {
+            var gateway = new SpringPlatformGatewaysAdapter(
+                    mock(PermissionCache.class), mock(PlatformTransactionManager.class),
+                    new BCryptPasswordEncoder(4),
+                    new IdentityTokenService("unit-test-secret-unit-test-secret-32", "https://identity.test", 7200),
+                    new ObjectMapper());
+            service = new DddWebhookService(new JpaWebhookRepositoryAdapter(dao),
+                    new JpaRbacRepositoryAdapter(mock(RbacDao.class)),
+                    gateway, gateway, gateway, true, 500, 8, 1);
+        } else {
+            service = new StructuredWebhookService(dao, mock(RbacDao.class), new ObjectMapper(), true, 500, 8, 1);
+        }
         try {
             long start = System.nanoTime();
             service.deliverNow();

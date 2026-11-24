@@ -4,9 +4,9 @@ import cn.edu.xmu.clonefactory.util.CloneFactory;
 import com.melonhub.rbac.dto.ContextContracts;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.ApplicationCaller;
-import com.melonhub.rbac.service.ContextService;
-import com.melonhub.rbac.service.GovernanceService;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.ContextUseCase;
+import com.melonhub.rbac.service.port.GovernanceUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -16,10 +16,10 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1")
 public class BusinessController {
-    private final RbacService r;
-    private final ContextService contexts;
-    private final GovernanceService governance;
-    public BusinessController(RbacService r, ContextService contexts, GovernanceService governance) {
+    private final RbacUseCase r;
+    private final ContextUseCase contexts;
+    private final GovernanceUseCase governance;
+    public BusinessController(RbacUseCase r, ContextUseCase contexts, GovernanceUseCase governance) {
         this.r = r; this.contexts = contexts; this.governance = governance;
     }
 

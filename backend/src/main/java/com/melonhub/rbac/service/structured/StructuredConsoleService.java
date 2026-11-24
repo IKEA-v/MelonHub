@@ -1,4 +1,7 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.ConsoleUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.melonhub.rbac.cache.PermissionCache;
 import com.melonhub.rbac.dao.AuditDao;
@@ -19,7 +22,8 @@ import org.springframework.stereotype.Service;
 
 /** Console-wide helpers: global search and the system status board. */
 @Service
-public class ConsoleService {
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredConsoleService implements ConsoleUseCase {
     private static final List<String> DATABASE_DETAILS =
             List.of("counts", "pendingRequests", "openReviews", "webhookBacklog", "expiringIn7Days", "audit");
 
@@ -29,7 +33,7 @@ public class ConsoleService {
     private final AuditDao audit;
     private final PermissionCache cache;
 
-    public ConsoleService(RbacDao dao, GovernanceDao gov, WebhookDao webhooks, AuditDao audit, PermissionCache cache) {
+    public StructuredConsoleService(RbacDao dao, GovernanceDao gov, WebhookDao webhooks, AuditDao audit, PermissionCache cache) {
         this.dao = dao; this.gov = gov; this.webhooks = webhooks; this.audit = audit; this.cache = cache;
     }
 

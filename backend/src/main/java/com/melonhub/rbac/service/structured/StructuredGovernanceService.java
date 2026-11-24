@@ -1,4 +1,9 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.GovernanceUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
+import com.melonhub.rbac.service.port.WebhookUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.melonhub.rbac.cache.PermissionCache;
 import com.melonhub.rbac.dao.ContextDao;
@@ -33,17 +38,18 @@ import org.springframework.transaction.annotation.Transactional;
  * notify webhooks exactly like direct console changes.
  */
 @Service
-public class GovernanceService {
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredGovernanceService implements GovernanceUseCase {
     private final GovernanceDao gov;
     private final RbacDao dao;
     private final ContextDao contexts;
     private final PermissionCache cache;
-    private final RbacService rbac;
-    private final WebhookService webhooks;
+    private final RbacUseCase rbac;
+    private final WebhookUseCase webhooks;
     private final Validator validator;
     public static final int HOLDER_LIMIT = 500;
 
-    public GovernanceService(GovernanceDao gov, RbacDao dao, ContextDao contexts, PermissionCache cache, RbacService rbac, WebhookService webhooks,
+    public StructuredGovernanceService(GovernanceDao gov, RbacDao dao, ContextDao contexts, PermissionCache cache, RbacUseCase rbac, WebhookUseCase webhooks,
                              Validator validator) {
         this.gov = gov; this.dao = dao; this.contexts = contexts; this.cache = cache; this.rbac = rbac; this.webhooks = webhooks;
         this.validator = validator;
@@ -53,7 +59,7 @@ public class GovernanceService {
     public Map<String,Object> requests(Long app, Visibility visible, String status, String keyword, int page, int size) {
         if (status != null && !status.isBlank() && !List.of("PENDING", "APPROVED", "REJECTED", "CANCELLED").contains(status.strip()))
             throw ApiException.bad("状态只能是 PENDING、APPROVED、REJECTED 或 CANCELLED");
-        return RbacService.page(gov.requests(app, visible, status, keyword, page, size), page, size);
+        return page(gov.requests(app, visible, status, keyword, page, size), page, size);
     }
     public Map<String,Object> request(long id) { return gov.request(id).orElseThrow(() -> ApiException.missing("申请不存在")); }
 
@@ -179,7 +185,7 @@ public class GovernanceService {
         review(review);
         if (decision != null && !decision.isBlank() && !List.of("PENDING", "KEEP", "REVOKE").contains(decision.strip()))
             throw ApiException.bad("决定只能是 PENDING、KEEP 或 REVOKE");
-        return RbacService.page(gov.reviewItems(review, decision, page, size), page, size);
+        return page(gov.reviewItems(review, decision, page, size), page, size);
     }
     @Transactional public void decideReviewItem(long reviewId, long itemId, Requests.ReviewItemDecision body, String actor) {
         lockOpenReview(reviewId);
@@ -472,6 +478,7 @@ public class GovernanceService {
         return dao.expiringAssignments(Timestamp.from(Instant.now().plus(days, ChronoUnit.DAYS)), visible, app);
     }
 
+    private static Map<String,Object> page(RbacDao.Page p, int number, int size) { return RbacUseCase.page(p.items(), p.total(), number, size); }
     private static long number(Object value) { return ((Number) value).longValue(); }
     private static String text(String value) { return Objects.requireNonNullElse(value, "").strip(); }
     @SuppressWarnings("unchecked") private static List<Map<String,Object>> rows(Object value) { return (List<Map<String,Object>>) value; }

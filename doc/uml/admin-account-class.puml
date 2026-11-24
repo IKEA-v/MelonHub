@@ -1,54 +1,47 @@
 @startuml
-title 分级管理员账号 · 类图
+title 分级管理员账号 · 双策略类图 (Structured vs DDD)
 skinparam classAttributeIconSize 0
 skinparam shadowing false
 hide empty members
 class AccountController {
-  - auth: AuthService
+  - auth: AuthUseCase
   + create(body: Account, req: HttpServletRequest): Map
   + update(id: long, body: AccountUpdate, req: HttpServletRequest): Map
 }
-class AuthService {
-  - dao: AuthDao
-  - roles: AdminRoleDao
+interface AuthUseCase <<port>> {
   + createAccount(input: Account, actor: AdminPrincipal): long
   + updateAccount(id: long, input: AccountUpdate, actor: AdminPrincipal): void
 }
-class AdminTree {
-  - nodes: Map<Long, AccountNode>
-  - roleFunctions: Map
-  + manages(actor: long, target: long): boolean
+class StructuredAuthService <<structured>> {
+  - dao: AuthDao
+  - roles: AdminRoleDao
+}
+class StructuredAdminHierarchyProcedures <<utility>> {
+  + {static} findViolations(accounts, roleFunctions): List
+  + {static} manages(accounts, actor, target): boolean
+  + {static} manageableAccountIds(accounts, actor): Set
+}
+class DddAuthService <<ddd.application>> {
+  - accounts: AdminAccountRepositoryPort
+  - roles: AdminRoleRepositoryPort
+}
+class AdminHierarchy <<ddd.domain.model>> {
+  - nodes: Map<Long, AdminNode>
+  + validateCreate(actorId, candidate): AdminNode
+  + validateUpdate(actorId, proposed): UpdateDecision
   + violations(): List
 }
-class AuthDao {
-  + lockAccounts(): void
-  + nodes(): List<AccountNode>
-  + moveUnder(id: long, parentId: long): void
-}
-class AdminRoleDao {
-  + functionsByRole(): Map
-}
-class AdminAccount <<entity>> {
-  - id: Long {PK, auto-increment}
-  - username: String {unique}
-  - departmentIds: Set<Long>
-  - applicationIds: Set<Long>
-}
-class AdminSession <<entity>> {
-  - tokenHash: String {PK}
-  - credentialVersion: long
-}
-class AccountNode <<record>> {
-  + id: long
-  + username: String
-  + parentId: Long
-}
-AccountController -down-> AuthService : auth
-AuthService -left-> AuthDao : dao
-AuthService -right-> AdminRoleDao : roles
-AuthService ..down> AdminTree
-AdminTree -down-> AccountNode : nodes
-AuthDao ..down> AdminAccount
-AdminAccount "0..*" -left-> "0..1" AdminAccount : parent · parent_id
-AdminSession "0..*" -up-> "1" AdminAccount : account · account_id
+interface AdminAccountRepositoryPort <<ddd.domain.repository>>
+class JpaAdminAccountRepositoryAdapter <<ddd.infrastructure>>
+class AuthDao
+
+AccountController --> AuthUseCase
+StructuredAuthService ..|> AuthUseCase
+DddAuthService ..|> AuthUseCase
+StructuredAuthService ..> StructuredAdminHierarchyProcedures
+StructuredAuthService --> AuthDao
+DddAuthService ..> AdminHierarchy
+DddAuthService --> AdminAccountRepositoryPort
+JpaAdminAccountRepositoryAdapter ..|> AdminAccountRepositoryPort
+JpaAdminAccountRepositoryAdapter --> AuthDao
 @enduml

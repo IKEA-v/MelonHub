@@ -7,8 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.AuthService;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.AuthUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -38,8 +38,8 @@ class R18_AdminRoleIntegrationTest {
     @Autowired MockMvc mvc;
     @Value("${melonhub.admin-username}") String bootstrap;
     @Autowired ObjectMapper mapper;
-    @Autowired AuthService auth;
-    @Autowired RbacService r;
+    @Autowired AuthUseCase auth;
+    @Autowired RbacUseCase r;
     /** root is the signed-in super administrator; accounts this test creates are placed below it, so it manages them. */
     String suffix, root, rootUser;
 

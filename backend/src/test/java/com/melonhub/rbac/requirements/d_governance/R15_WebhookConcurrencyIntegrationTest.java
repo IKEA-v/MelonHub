@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.RbacService;
-import com.melonhub.rbac.service.WebhookService;
+import com.melonhub.rbac.service.port.RbacUseCase;
+import com.melonhub.rbac.service.port.WebhookUseCase;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.util.List;
@@ -30,8 +30,8 @@ import org.springframework.test.context.ContextConfiguration;
 @ContextConfiguration(initializers = CloudTestDatabaseGuard.class)
 class R15_WebhookConcurrencyIntegrationTest {
     private static final String ACTOR = "race-test";
-    @Autowired RbacService r;
-    @Autowired WebhookService webhooks;
+    @Autowired RbacUseCase r;
+    @Autowired WebhookUseCase webhooks;
     @Autowired JdbcTemplate db;
 
     @DisplayName("R15 慢 Webhook 接收端既不阻塞调度线程也不互相阻塞")

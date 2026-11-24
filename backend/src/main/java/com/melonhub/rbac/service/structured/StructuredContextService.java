@@ -1,4 +1,8 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.ContextUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import cn.edu.xmu.clonefactory.util.CloneFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -32,7 +36,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * and repeated checks are served from {@link PermissionCache} until an authorization change invalidates them.
  */
 @Service
-public class ContextService {
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredContextService implements ContextUseCase {
     public static final long CONTEXT_SECONDS = 3600;
 
     record Meta(String u, String d, String a, long v, long exp) {
@@ -49,12 +54,12 @@ public class ContextService {
     record Access(Meta meta, Payload payload) {}
 
     private final ContextDao dao;
-    private final RbacService rbac;
+    private final RbacUseCase rbac;
     private final PermissionCache cache;
     private final ObjectMapper json;
     private final TransactionTemplate snapshot;
 
-    public ContextService(ContextDao dao, RbacService rbac, PermissionCache cache, ObjectMapper json, PlatformTransactionManager transactions) {
+    public StructuredContextService(ContextDao dao, RbacUseCase rbac, PermissionCache cache, ObjectMapper json, PlatformTransactionManager transactions) {
         this.dao = dao; this.rbac = rbac; this.cache = cache; this.json = json;
         this.snapshot = new TransactionTemplate(transactions);
     }

@@ -7,7 +7,7 @@ import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.exception.ApiException;
 import com.melonhub.rbac.security.Credentials;
 import com.melonhub.rbac.security.Totp;
-import com.melonhub.rbac.service.AuthService;
+import com.melonhub.rbac.service.port.AuthUseCase;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -31,7 +31,7 @@ import org.springframework.test.context.ContextConfiguration;
 @ContextConfiguration(initializers = CloudTestDatabaseGuard.class)
 class R17_AdminTotpConcurrencyIntegrationTest {
     private static final String ACTOR = "race-test";
-    @Autowired AuthService auth;
+    @Autowired AuthUseCase auth;
     @Value("${melonhub.admin-username}") String bootstrap;
     @Autowired JdbcTemplate db;
 

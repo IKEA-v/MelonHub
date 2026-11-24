@@ -2,8 +2,8 @@ package com.melonhub.rbac.controller;
 
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.AdminAccess;
-import com.melonhub.rbac.service.AuthService;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.AuthUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -13,9 +13,9 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class AuthController {
-    private final RbacService rbac;
-    private final AuthService auth;
-    public AuthController(RbacService rbac, AuthService auth) { this.rbac = rbac; this.auth = auth; }
+    private final RbacUseCase rbac;
+    private final AuthUseCase auth;
+    public AuthController(RbacUseCase rbac, AuthUseCase auth) { this.rbac = rbac; this.auth = auth; }
 
     @GetMapping("/api/health") ResponseEntity<Map<String,Object>> health() {
         var health = rbac.health();

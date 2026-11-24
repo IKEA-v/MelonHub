@@ -18,7 +18,7 @@ import com.melonhub.rbac.exception.ApiException;
  * 为课程管理系统签发和校验统一身份 JWT。
  *
  * <p>令牌只携带身份认证所需的 subject、aud、iss、iat、exp 和 jti，角色与权限由
- * {@link IdentityService} 按数据库授权关系查询。</p>
+ * {@link com.melonhub.rbac.service.port.IdentityUseCase} 按数据库授权关系查询。</p>
  */
 public final class IdentityTokenService {
 

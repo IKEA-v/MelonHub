@@ -6,7 +6,7 @@ import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.exception.ApiException;
 import com.melonhub.rbac.security.AdminAccess;
 import com.melonhub.rbac.security.RequiresFunction;
-import com.melonhub.rbac.service.AdminRoleService;
+import com.melonhub.rbac.service.port.AdminRoleUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.Map;
@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/admin")
 public class AdminRoleController {
-    private final AdminRoleService roles;
-    public AdminRoleController(AdminRoleService roles) { this.roles = roles; }
+    private final AdminRoleUseCase roles;
+    public AdminRoleController(AdminRoleUseCase roles) { this.roles = roles; }
 
     private static String code(String value) {
         if (!value.matches(Requests.ADMIN_ROLE_CODE)) throw ApiException.bad("角色编码格式不正确");

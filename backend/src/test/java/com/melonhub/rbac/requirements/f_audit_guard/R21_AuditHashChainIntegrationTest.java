@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.melonhub.rbac.dao.AuditDao;
 import com.melonhub.rbac.requirements.support.GovernanceIntegrationSupport;
-import com.melonhub.rbac.service.AuditSealService;
+import com.melonhub.rbac.service.port.AuditSealUseCase;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
@@ -73,7 +73,7 @@ class R21_AuditHashChainIntegrationTest extends GovernanceIntegrationSupport {
         sealer.sealNow();
         long keptSeq = sealSeq(kept);
         db.update("UPDATE audit_events SET created_at=TIMESTAMPADD(DAY,-200,CURRENT_TIMESTAMP) WHERE seal_seq<?", keptSeq);
-        while (sealer.purge(180) == AuditSealService.PURGE_BATCH) { /* drain */ }
+        while (sealer.purge(180) == AuditSealUseCase.PURGE_BATCH) { /* drain */ }
         assertThat(db.queryForObject("SELECT COUNT(*) FROM audit_events WHERE seal_seq<?", Long.class, keptSeq)).isZero();
         assertThat(db.queryForObject("SELECT anchor_seq FROM audit_seal WHERE id=1", Long.class)).isEqualTo(keptSeq - 1);
         var result = sealer.verify(null, 10_000);

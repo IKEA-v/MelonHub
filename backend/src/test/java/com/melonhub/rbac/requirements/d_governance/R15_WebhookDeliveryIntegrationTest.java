@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.requirements.support.GovernanceIntegrationSupport;
-import com.melonhub.rbac.service.WebhookService;
+import com.melonhub.rbac.service.port.WebhookUseCase;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -44,7 +44,7 @@ class R15_WebhookDeliveryIntegrationTest extends GovernanceIntegrationSupport {
             assertThat(event.get()).isEqualTo("user.roles.changed");
             String[] parts = signature.get().split(",");
             String timestamp = parts[0].substring(2);
-            assertThat(parts[1].substring(3)).isEqualTo(WebhookService.hmacSha256(secret, timestamp + "." + body.get()));
+            assertThat(parts[1].substring(3)).isEqualTo(WebhookUseCase.hmacSha256(secret, timestamp + "." + body.get()));
             assertThat(mapper.readTree(body.get()).path("data").path("externalId").asText()).isEqualTo(external);
             Long deliveries = db.queryForObject("SELECT COUNT(*) FROM webhook_deliveries WHERE status='DELIVERED'", Long.class);
             assertThat(deliveries).isEqualTo(1);

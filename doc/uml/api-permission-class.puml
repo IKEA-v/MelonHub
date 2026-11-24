@@ -1,27 +1,40 @@
 @startuml
-title API 全局权限查询 · 类图
+title API 全局权限查询 · 双策略类图 (Structured vs DDD)
 skinparam classAttributeIconSize 0
 skinparam shadowing false
 hide empty members
 class IdentityController {
-  - identityService: IdentityService
+  - identityService: IdentityUseCase
   + apiPermission(authorization: String, operationId: String): Map
 }
-class IdentityService {
+interface IdentityUseCase <<port>> {
+  + checkApiPermission(authorization: String, operationId: String): Map
+}
+class StructuredIdentityService <<structured>> {
   - identityDao: IdentityDao
   - tokenService: IdentityTokenService
-  + checkApiPermission(authorization: String, operationId: String): Map
-  - authenticatedUser(authorization: String): UserRow
 }
-class IdentityDao {
-  + activeSession(tokenHash: String, now: Instant): boolean
-  + userByExternalId(externalId: String): Optional
-  + permissions(userId: long, system: String): List
+class DddIdentityService <<ddd.application>> {
+  - repository: IdentityRepositoryPort
+  - tokens: IdentityTokenGateway
 }
-class IdentityTokenService {
-  + verify(token: String, system: String): Claims
+class CoursePermissionCatalog <<ddd.domain.value>> {
+  + {static} requirePermissionForOperation(operationId): String
 }
-IdentityController -down-> IdentityService : identityService
-IdentityService -left-> IdentityDao : identityDao
-IdentityService -right-> IdentityTokenService : tokenService
+class IdentityAccountAggregate <<ddd.domain.model>> {
+  + hasUiPermission(code): boolean
+}
+interface IdentityRepositoryPort <<ddd.domain.repository>>
+class JpaIdentityRepositoryAdapter <<ddd.infrastructure>>
+class IdentityDao
+
+IdentityController --> IdentityUseCase
+StructuredIdentityService ..|> IdentityUseCase
+DddIdentityService ..|> IdentityUseCase
+StructuredIdentityService --> IdentityDao
+DddIdentityService ..> CoursePermissionCatalog
+DddIdentityService ..> IdentityAccountAggregate
+DddIdentityService --> IdentityRepositoryPort
+JpaIdentityRepositoryAdapter ..|> IdentityRepositoryPort
+JpaIdentityRepositoryAdapter --> IdentityDao
 @enduml

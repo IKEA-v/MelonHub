@@ -6,9 +6,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dto.Requests;
-import com.melonhub.rbac.identity.IdentityService;
+import com.melonhub.rbac.service.port.IdentityUseCase;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,8 +32,8 @@ class R25_IdentityCourseAuditIntegrationTest {
     private static final String TEST_PASSWORD = "fixture-only-identity-password";
 
     @Autowired MockMvc mvc;
-    @Autowired RbacService rbac;
-    @Autowired IdentityService identity;
+    @Autowired RbacUseCase rbac;
+    @Autowired IdentityUseCase identity;
 
     @Test
     @DisplayName("R25 GET /auth/audit-logs 仅返回持有 AV 权限部门内的课程业务日志")

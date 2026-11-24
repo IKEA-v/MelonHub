@@ -1,4 +1,8 @@
-package com.melonhub.rbac.service;
+package com.melonhub.rbac.service.structured;
+
+import com.melonhub.rbac.service.port.AuthUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,16 +44,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class AuthService implements ApplicationRunner {
+@ConditionalOnProperty(name = "melonhub.backend-strategy", havingValue = "structured", matchIfMissing = true)
+public class StructuredAuthService implements AuthUseCase, ApplicationRunner {
     /** BCrypt only reads the first 72 bytes of a password; longer ones would be silently cut. */
     public static final int PASSWORD_MAX_BYTES = 72;
     private record KeyMeta(String a, long k) {}
     private record KeyState(boolean valid, Long exp) {}
 
-    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+    private static final Logger log = LoggerFactory.getLogger(StructuredAuthService.class);
     private final AuthDao dao;
     private final AdminRoleDao roles;
-    private final RbacService rbac;
+    private final RbacUseCase rbac;
     private final PermissionCache cache;
     private final ObjectMapper json;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(12);
@@ -63,7 +68,7 @@ public class AuthService implements ApplicationRunner {
     private final String dummyHash;
     private final Set<Long> usedKeys = ConcurrentHashMap.newKeySet();
 
-    public AuthService(AuthDao dao, AdminRoleDao roles, RbacService rbac, PermissionCache cache, ObjectMapper json,
+    public StructuredAuthService(AuthDao dao, AdminRoleDao roles, RbacUseCase rbac, PermissionCache cache, ObjectMapper json,
                        @Value("${melonhub.admin-username}") String bootstrapUser,
                        @Value("${melonhub.admin-password}") String bootstrapPassword,
                        @Value("${melonhub.admin-password-reset:false}") boolean bootstrapReset,
@@ -142,7 +147,7 @@ public class AuthService implements ApplicationRunner {
         result.put("token", token);
         result.put("expiresIn", sessionSeconds);
         result.put("idleTimeout", idleMinutes * 60);
-        result.putAll(view(principal(account.id(), account.username(), account.displayName(), account.role(), account.kind(), account.root(),
+        result.putAll(AuthUseCase.view(principal(account.id(), account.username(), account.displayName(), account.role(), account.kind(), account.root(),
                 account.allDepartments(), account.allApplications())));
         result.put("mfaEnabled", account.mfaSecret() != null);
         return result;
@@ -218,14 +223,14 @@ public class AuthService implements ApplicationRunner {
     /** Super administrators clear a lost device; the account then signs in with password only until re-enrolled. */
     @Transactional public void resetMfa(long id, AdminPrincipal actor) {
         dao.lockAccounts();
-        String username = requireManaged(actor, id).node(id).username();
+        String username = requireManagedAccount(dao.nodes(), actor, id).username();
         if (dao.disableMfa(id) == 0) throw ApiException.missing("管理员账号不存在");
         dao.endSessions(id);
         rbac.audit(actor.actor(), "MFA_RESET", username, null, null, "两步验证已重置");
     }
 
     public Map<String,Object> me(AdminPrincipal principal) {
-        var view = new LinkedHashMap<>(view(principal));
+        var view = new LinkedHashMap<>(AuthUseCase.view(principal));
         view.put("mfaEnabled", dao.account(principal.id()).map(account -> account.mfaSecret() != null).orElse(false));
         return view;
     }
@@ -270,7 +275,7 @@ public class AuthService implements ApplicationRunner {
 
     /** The accounts the operator manages, and its own; manageable tells which ones it may change. */
     public List<Map<String,Object>> accounts(AdminPrincipal actor) {
-        var tree = tree();
+        var manageableIds = StructuredAdminHierarchyProcedures.manageableAccountIds(dao.nodes(), actor.id());
         var applications = new HashMap<Long,List<Long>>();
         for (var pair : dao.accountApplicationPairs())
             applications.computeIfAbsent((Long) pair.get("accountId"), k -> new ArrayList<>()).add(((Number) pair.get("application_id")).longValue());
@@ -280,7 +285,7 @@ public class AuthService implements ApplicationRunner {
         var result = new ArrayList<Map<String,Object>>();
         for (var account : dao.accounts()) {
             long id = (Long) account.get("id");
-            boolean manageable = tree.manages(actor.id(), id);
+            boolean manageable = manageableIds.contains(id);
             if (!manageable && id != actor.id()) continue;
             account.put("applicationIds", applications.getOrDefault(id, List.of()));
             account.put("departmentIds", departments.getOrDefault(id, List.of()));
@@ -292,18 +297,17 @@ public class AuthService implements ApplicationRunner {
 
     /**
      * Creates an account below the operator, or below an account the operator manages. The new account must stay
-     * within its parent (role functions, departments, applications); see AdminTree.
+     * within its parent (role functions, departments, applications); validated procedurally.
      */
     @Transactional public long createAccount(Requests.Account input, AdminPrincipal actor) {
         dao.lockAccounts();
         requireRole(input.role());
         var nodes = dao.nodes();
         var roleFunctions = roles.functionsByRole();
-        var before = new AdminTree(nodes, roleFunctions);
         long parentId = requestedParent(input.parentId(), input.parentUsername(), actor.id());
-        var parent = before.node(parentId);
+        var parent = StructuredAdminHierarchyProcedures.findNode(nodes, parentId);
         if (parent == null) throw ApiException.bad("上级管理员不存在");
-        if (parentId != actor.id() && !before.manages(actor.id(), parentId))
+        if (parentId != actor.id() && !StructuredAdminHierarchyProcedures.manages(nodes, actor.id(), parentId))
             throw ApiException.forbidden("只能在自己或自己管理的管理员下创建账号");
         String kind = input.kind() == null ? AdminPrincipal.MANAGER : input.kind();
         boolean allDepartments = everything(input.allDepartments(), input.departmentIds());
@@ -331,12 +335,11 @@ public class AuthService implements ApplicationRunner {
         dao.lockAccounts();
         var nodes = dao.nodes();
         var roleFunctions = roles.functionsByRole();
-        var before = new AdminTree(nodes, roleFunctions);
-        var current = before.node(id);
+        var current = StructuredAdminHierarchyProcedures.findNode(nodes, id);
         if (current == null) throw ApiException.missing("管理员账号不存在");
         String username = current.username();
         boolean self = id == actor.id();
-        if (!self && !before.manages(actor.id(), id)) throw ApiException.forbidden("只能管理自己下级的管理员账号");
+        if (!self && !StructuredAdminHierarchyProcedures.manages(nodes, actor.id(), id)) throw ApiException.forbidden("只能管理自己下级的管理员账号");
         requireRole(input.role());
         String kind = input.kind() == null ? current.kind() : input.kind();
         boolean keepDepartments = input.allDepartments() == null && input.departmentIds() == null;
@@ -357,13 +360,16 @@ public class AuthService implements ApplicationRunner {
             throw ApiException.bad("不能修改自己的角色、类型、管理范围或上级，也不能停用自己的账号");
         if (roleChanged || kindChanged || scopeChanged)
             requireSoftwareRoleScope(input.role(), kind, allDepartments, allApplications, applications);
-        if ((roleChanged || disabling) && current.enabled() && AdminPrincipal.SUPER_ADMIN.equals(current.role()) && enabledSuperAdmins(before) <= 1)
+        if ((roleChanged || disabling) && current.enabled() && AdminPrincipal.SUPER_ADMIN.equals(current.role()) && StructuredAdminHierarchyProcedures.enabledSuperAdminCount(nodes) <= 1)
             throw ApiException.conflict("至少需要保留一个启用的超级管理员");
-        if (disabling && !before.children(id).isEmpty())
-            throw ApiException.conflict("该管理员还有 " + before.children(id).size() + " 个下级管理员，请先移交或删除下级后再停用");
+        var children = StructuredAdminHierarchyProcedures.childIds(nodes, id);
+        if (disabling && !children.isEmpty())
+            throw ApiException.conflict("该管理员还有 " + children.size() + " 个下级管理员，请先移交或删除下级后再停用");
+        AuthDao.AccountNode newParent = null;
         if (parentChanged) {
-            if (parentId == null || before.node(parentId) == null) throw ApiException.bad("上级管理员不存在");
-            if (parentId != actor.id() && !before.manages(actor.id(), parentId))
+            newParent = parentId == null ? null : StructuredAdminHierarchyProcedures.findNode(nodes, parentId);
+            if (newParent == null) throw ApiException.bad("上级管理员不存在");
+            if (parentId != actor.id() && !StructuredAdminHierarchyProcedures.manages(nodes, actor.id(), parentId))
                 throw ApiException.forbidden("只能移到自己或自己管理的管理员之下");
         }
         requireConsistent(with(nodes, new AuthDao.AccountNode(id, username, parentId, kind, input.role(), input.enabled(), allDepartments,
@@ -374,7 +380,7 @@ public class AuthService implements ApplicationRunner {
         if (parentChanged) dao.moveUnder(id, parentId);
         if (roleChanged || disabling || kindChanged) dao.endSessions(id);
         rbac.audit(actor.actor(), "ACCOUNT_UPDATED", username, null, null,
-                "角色 " + input.role() + (input.enabled() ? "，启用" : "，停用") + (parentChanged ? "，上级改为 " + before.node(parentId).username() : "") + kindDetail(kind)
+                "角色 " + input.role() + (input.enabled() ? "，启用" : "，停用") + (parentChanged ? "，上级改为 " + newParent.username() : "") + kindDetail(kind)
                         + scopeDetail(allDepartments, departments, allApplications, applications));
     }
 
@@ -389,7 +395,7 @@ public class AuthService implements ApplicationRunner {
 
     @Transactional public void resetPassword(long id, Requests.PasswordReset input, AdminPrincipal actor) {
         dao.lockAccounts();
-        String username = requireManaged(actor, id).node(id).username();
+        String username = requireManagedAccount(dao.nodes(), actor, id).username();
         if (dao.updatePassword(id, encode(input.password())) == 0) throw ApiException.missing("管理员账号不存在");
         dao.endSessions(id);
         rbac.audit(actor.actor(), "ACCOUNT_PASSWORD_RESET", username, null, null, "该账号全部会话已下线");
@@ -397,7 +403,7 @@ public class AuthService implements ApplicationRunner {
 
     @Transactional public void unlock(long id, AdminPrincipal actor) {
         dao.lockAccounts();
-        String username = requireManaged(actor, id).node(id).username();
+        String username = requireManagedAccount(dao.nodes(), actor, id).username();
         if (dao.unlock(id) == 0) throw ApiException.missing("管理员账号不存在");
         rbac.audit(actor.actor(), "ACCOUNT_UNLOCKED", username, null, null, "");
     }
@@ -405,11 +411,12 @@ public class AuthService implements ApplicationRunner {
     @Transactional public void deleteAccount(long id, AdminPrincipal actor) {
         if (id == actor.id()) throw ApiException.bad("不能删除当前登录的账号");
         dao.lockAccounts();
-        var tree = requireManaged(actor, id);
-        if (!tree.children(id).isEmpty())
-            throw ApiException.conflict("该管理员还有 " + tree.children(id).size() + " 个下级管理员，请先移交或删除下级");
-        var account = tree.node(id);
-        if (account.enabled() && AdminPrincipal.SUPER_ADMIN.equals(account.role()) && enabledSuperAdmins(tree) <= 1)
+        var nodes = dao.nodes();
+        var account = requireManagedAccount(nodes, actor, id);
+        var children = StructuredAdminHierarchyProcedures.childIds(nodes, id);
+        if (!children.isEmpty())
+            throw ApiException.conflict("该管理员还有 " + children.size() + " 个下级管理员，请先移交或删除下级");
+        if (account.enabled() && AdminPrincipal.SUPER_ADMIN.equals(account.role()) && StructuredAdminHierarchyProcedures.enabledSuperAdminCount(nodes) <= 1)
             throw ApiException.conflict("至少需要保留一个启用的超级管理员");
         if (dao.deleteAccount(id) == 0) throw ApiException.missing("管理员账号不存在");
         rbac.audit(actor.actor(), "ACCOUNT_DELETED", account.username(), null, null, "");
@@ -424,53 +431,28 @@ public class AuthService implements ApplicationRunner {
         roleFunctions.put(role, functions);
         requireConsistent(dao.nodes(), roleFunctions);
     }
-    /** Refuses a change, before anything is written, when the tree it would produce breaks a rule. */
+    /** Refuses a change, before anything is written, when the hierarchy it would produce breaks a rule. */
     private static void requireConsistent(List<AuthDao.AccountNode> nodes, Map<String,Set<String>> roleFunctions) {
-        var problems = new AdminTree(nodes, roleFunctions).violations();
+        var problems = StructuredAdminHierarchyProcedures.findViolations(nodes, roleFunctions);
         if (!problems.isEmpty())
             throw ApiException.conflict("管理员层级不满足要求：" + String.join("；", problems.subList(0, Math.min(3, problems.size()))));
     }
     /** The accounts with one of them added or replaced. */
     private static List<AuthDao.AccountNode> with(List<AuthDao.AccountNode> nodes, AuthDao.AccountNode changed) {
-        var result = new ArrayList<AuthDao.AccountNode>();
-        for (var node : nodes) if (node.id() != changed.id()) result.add(node);
-        result.add(changed);
-        return result;
+        return StructuredAdminHierarchyProcedures.replaceNode(nodes, changed);
     }
 
-    private AdminTree tree() { return new AdminTree(dao.nodes(), roles.functionsByRole()); }
-    private AdminTree requireManaged(AdminPrincipal actor, long id) {
-        var tree = tree();
-        if (tree.node(id) == null) throw ApiException.missing("管理员账号不存在");
-        if (!tree.manages(actor.id(), id)) throw ApiException.forbidden("只能管理自己下级的管理员账号");
-        return tree;
+    private static AuthDao.AccountNode requireManagedAccount(List<AuthDao.AccountNode> nodes, AdminPrincipal actor, long id) {
+        var node = StructuredAdminHierarchyProcedures.findNode(nodes, id);
+        if (node == null) throw ApiException.missing("管理员账号不存在");
+        if (!StructuredAdminHierarchyProcedures.manages(nodes, actor.id(), id)) throw ApiException.forbidden("只能管理自己下级的管理员账号");
+        return node;
     }
     private Long requestedParent(Long requestedId, String requestedUsername, Long fallback) {
         if (requestedId != null) return requestedId;
         if (requestedUsername == null) return fallback;
         return dao.account(requestedUsername).map(AuthDao.AccountRow::id)
                 .orElseThrow(() -> ApiException.bad("上级管理员不存在"));
-    }
-
-    private static long enabledSuperAdmins(AdminTree tree) {
-        return tree.accounts().stream().filter(a -> a.enabled() && AdminPrincipal.SUPER_ADMIN.equals(a.role())).count();
-    }
-
-    public static Map<String,Object> view(AdminPrincipal principal) {
-        var view = new LinkedHashMap<String,Object>();
-        view.put("id", principal.id());
-        view.put("username", principal.username());
-        view.put("displayName", principal.displayName());
-        view.put("role", principal.role());
-        view.put("roleName", principal.roleName());
-        view.put("functions", principal.functions().stream().map(AdminFunction::code).sorted().toList());
-        view.put("root", principal.root());
-        view.put("kind", principal.kind());
-        view.put("allDepartments", principal.allDepartments());
-        view.put("departmentIds", principal.departmentIds().stream().sorted().toList());
-        view.put("allApplications", principal.allApplications());
-        view.put("applicationIds", principal.applicationIds().stream().sorted().toList());
-        return view;
     }
 
     /** The operator with the functions its role grants now; a role change takes effect on the next request. */

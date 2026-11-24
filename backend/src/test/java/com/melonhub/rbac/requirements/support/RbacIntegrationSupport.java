@@ -5,8 +5,8 @@ import com.melonhub.rbac.CloudTestDatabaseGuard;
 import com.melonhub.rbac.dao.AuthDao;
 import com.melonhub.rbac.dto.Requests;
 import com.melonhub.rbac.security.Credentials;
-import com.melonhub.rbac.service.ContextService;
-import com.melonhub.rbac.service.RbacService;
+import com.melonhub.rbac.service.port.ContextUseCase;
+import com.melonhub.rbac.service.port.RbacUseCase;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,8 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 @ActiveProfiles("test")
 @ContextConfiguration(initializers = CloudTestDatabaseGuard.class)
 public abstract class RbacIntegrationSupport {
-    @Autowired protected RbacService r;
-    @Autowired protected ContextService c;
+    @Autowired protected RbacUseCase r;
+    @Autowired protected ContextUseCase c;
     @Autowired protected MockMvc mvc;
     @Autowired protected ObjectMapper mapper;
     @Autowired protected JdbcTemplate db;
