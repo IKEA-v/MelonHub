@@ -433,6 +433,19 @@ public class RbacDao {
         if (roles.isEmpty()) return;
         update("delete from UserRole ur where ur.user.id = :user and ur.role.id in :roles", "user", user, "roles", roles);
     }
+    public List<Map<String,Object>> userRoleAssignments(long user, Collection<Long> departments) {
+        if (departments.isEmpty()) return List.of();
+        return rows("""
+                select ur.departmentId as department_id, ur.applicationId as application_id,
+                       ur.role.id as role_id, ur.role.code as role_code
+                from UserRole ur where ur.user.id = :user and ur.departmentId in :departments
+                order by ur.departmentId, ur.applicationId, ur.role.id""", "user", user, "departments", departments);
+    }
+    public int removeUserRolesInDepartments(long user, Collection<Long> departments) {
+        if (departments.isEmpty()) return 0;
+        return update("delete from UserRole ur where ur.user.id = :user and ur.departmentId in :departments",
+                "user", user, "departments", departments);
+    }
     public List<Map<String,Object>> roleMembers(long role) {
         return rows("""
                 select u.id as id, u.name as name, u.externalId as externalId, u.email as email, u.enabled as enabled

@@ -248,11 +248,25 @@ public class RbacService {
             identity.revokeUserSessions(id);
         }
         var removed = dao.lockedUserDepartments(id).stream().filter(d -> !departments.contains(d)).toList();
+        var removedAssignments = dao.userRoleAssignments(id, removed);
+        dao.removeUserRolesInDepartments(id, removed);
         for (long dept : removed) dao.removeMembership(id, dept);
         for (long dept : departments) dao.addMembership(id, dept);
         dao.clearInactiveDepartment(id);
         cache.touchUser(id);
         webhooks.emitAll("user.updated", Map.of("userId", id, "externalId", body.externalId()));
+        for (var group : removedAssignments.stream().collect(java.util.stream.Collectors.groupingBy(row ->
+                number(row.get("department_id")) + ":" + number(row.get("application_id")), LinkedHashMap::new, Collectors.toList())).entrySet()) {
+            var first = group.getValue().get(0);
+            long dept = number(first.get("department_id"));
+            long app = number(first.get("application_id"));
+            var roleIds = group.getValue().stream().map(row -> number(row.get("role_id"))).toList();
+            var roleCodes = group.getValue().stream().map(row -> String.valueOf(row.get("role_code"))).toList();
+            contexts.revokeDomain(id, dept, app);
+            webhooks.emit(app, "user.roles.changed", Map.of("userId", id, "externalId", body.externalId(),
+                    "departmentId", dept, "removed", roleIds.size()));
+            audit(actor, "USER_ROLES_UPDATED", body.externalId(), dept, app, "移除角色 " + String.join(", ", roleCodes));
+        }
         var detail = new ArrayList<String>();
         if (identityChanged) detail.add("外部标识由 " + previous + " 变更，原有上下文已失效");
         if (!removed.isEmpty()) detail.add("移出部门 " + removed.size() + " 个，相关角色已解除");
