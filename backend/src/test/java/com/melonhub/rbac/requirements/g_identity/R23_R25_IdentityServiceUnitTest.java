@@ -142,8 +142,11 @@ class R23_R25_IdentityServiceUnitTest {
                 .containsEntry("roles", List.of("teacher"))
                 .containsEntry("permissions", List.of("CV", "CE", "MCO", "AV"));
 
-        assertThat(f.service().checkPermission(auth, "MCO")).containsEntry("allowed", true);
-        assertThat(f.service().checkPermission(auth, "MTR")).containsEntry("allowed", false);
+        // 单项查询仅返回本次权限码与判断结果，不携带用户资料或全部权限。
+        assertThat(f.service().checkPermission(auth, "MCO"))
+                .containsExactlyInAnyOrderEntriesOf(Map.of("permission", "MCO", "allowed", true));
+        assertThat(f.service().checkPermission(auth, "MTR"))
+                .containsExactlyInAnyOrderEntriesOf(Map.of("permission", "MTR", "allowed", false));
 
         assertThat(f.service().checkApiPermission(auth, "createCourse"))
                 .containsEntry("operationId", "createCourse").containsEntry("allowed", true);

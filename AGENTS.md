@@ -1,17 +1,12 @@
 # MelonHub 开发规范与任务交接
 
-最后更新：2026-11-22（Asia/Shanghai）。当前工作目录：`D:\PersonalStudy\MelonHub`。本地当前分支为 `main`。`origin` 指向 GitHub 源仓库 `https://github.com/JiuQi79-BOT/MelonHub`，`gitee` 指向 `https://gitee.com/jiuqi97bot/MelonHub`；当前没有配置 `upstream` 远端。后续改动按用户要求推送到源仓库 `main` 和 Gitee `main`，不要切换到个人 Fork。
+最后更新：2026-11-24（Asia/Shanghai）。当前工作目录：`D:\PersonalStudy\MelonHub`。本地当前分支为 `main`。`origin` 指向 GitHub 源仓库 `https://github.com/JiuQi79-BOT/MelonHub`，`gitee` 指向 `https://gitee.com/jiuqi97bot/MelonHub`；当前没有配置 `upstream` 远端。后续改动按用户要求推送到源仓库 `main` 和 Gitee `main`，不要切换到个人 Fork。
 
-上一轮完成“企业化改造”：修复鉴权绕过与监听地址缺陷，新增 Redis 权限缓存与无锁校验、限流与过载保护、多级管理员、多 API Key、审计增强、权限诊断、角色成员、跨部门复制，并用 Ant Design Vue 4 重建控制台。
-
-本轮（V3）完成授权治理与生态：角色分配有效期与自动到期、角色申请与审批、定期权限复核、Webhook 变更通知（事务外盒、签名、重试）、用户批量导入与权限清单导出导入、权限反查与即将到期报表、管理员 TOTP 两步验证、审计 SHA-256 哈希链、经 Redis 的跨实例全局限流与按软件限额、删除部门/软件时的依赖提示、Java SDK（`sdk/java`），以及控制台克制风格改版（明暗主题、全局搜索、14 个页面）。
-
-2026-10-19 按三批复审意见（9 + 20 + 5 项）修复：上下文创建可拒绝切换部门（`DEPARTMENT_MISMATCH`）、逐角色到期与 `grant_id`、复核只回收快照中的那次分配、治理历史名称快照、待审批唯一、批准可永久、Webhook 并行投递与按尝试次数认领、审计链按封存顺序与锚点及 v2 规范化、管理员会话绑定凭据版本、72 字节密码上限、角色成员替换的锁顺序与重试、系统状态降级时字段固定，以及对应的控制台（过时响应丢弃、抽屉状态重置、空值显示）与 SDK 改动。详细结果见 `doc/验证记录.md` 第 1 节。
-2026-11-22 当前交接状态：GitHub 源仓库和 Gitee 的 `main` 均已推送到提交 `069ff2a`。第二轮验收材料、MelonHub 统一身份 OpenAPI、请求日志测试和后端 UML 已在该提交中。Apifox 项目 `8983436` 的 `reference/identity-openapi.json` 已保存，含 9 个接口；回读确认用户模型字段仍为 `no`。课程联调验收环境中，MelonHub 管理员账号为 `admin`、`platform.admin`、`course.admin`、`platform.auditor`；当前课程登录联调账号为 `SG000001`（教师）和 `SG000191`（学生），暂未配置持有课程 `admin` 角色的业务账号。
+2026-11-25 验收环境使用 Docker Swarm。PR #8 合并后的代码基线为 `8bd2fcd`；为补充单项权限响应，MelonHub 后端当前镜像为 `melonhub-backend:permission-code-20261125`，采用默认 `structured` 策略；前端保留 `3c85d8a-origin-fix`。MySQL 使用 `lab_mysql` 的 `melonhub_rbac`，正式库已应用至 V16，Redis 关闭。服务器端口与更新步骤见 `deploy/README.md`，镜像、副本和实际验证范围见 `doc/验证记录.md`。本机开发是独立流程。
 
 ## 1. 用户要求与边界
 
-2026-10-19 最新补修：全量审查保留的 15 项问题已作最小修复；用户授权新增跨页选人、多角色批量追加与同页个别调整，保留已有有效分配及期限。普通列表 CSV、软件状态筛选、角色全选/清空恢复。MFA 变更结束旧会话、完整响应超时、导出快照、Webhook 数组契约及通知、旧 401 竞态等修复见 `doc/验证记录.md` 第 1.0 节；未增加迁移。用户要求最小修改，不添加无关防御性分支或抽象。
+2026-10-19 历史补修：全量审查保留的 15 项问题已作最小修复；用户授权新增跨页选人、多角色批量追加与同页个别调整，保留已有有效分配及期限。普通列表 CSV、软件状态筛选、角色全选/清空恢复。MFA 变更结束旧会话、完整响应超时、导出快照、Webhook 数组契约及通知、旧 401 竞态等修复见 `doc/验证记录.md` 第 1.0 节；未增加迁移。用户要求最小修改，不添加无关防御性分支或抽象。
 
 随后按用户要求优化对象内配置流程：选定部门/软件后打开配置抽屉，角色/权限/成员授权复用原页面内容，移除三个独立侧栏入口并保留旧地址。新建部门→维护成员，接入软件→保存密钥→配置角色，新建角色→创建权限并勾选→保存并分配成员均连续完成。多部门复制、多软件配置、多软件批量授权组合现有 API，各项独立提交并保留成功结果；不增加部门与软件准入关系或模板同步。仅修改前端与说明文档，后端和迁移未动。
 
@@ -23,6 +18,7 @@
 - 本机开发可复用已有 Docker MySQL `xmudemo-mysql`（8.3.0，卷 `xmudemo_db_data`），只使用 `melonhub_rbac` 和 `melonhub_rbac_test`。当前根目录 `.env` 的 `SPRING_PROFILES_ACTIVE=cloud`，配置的正式 schema 为 `melonhub_rbac`；只有显式切换为 `local` 才使用本机数据库配置。不得修改其他应用的数据库、数据或容器，不重建 Swarm、不删除持久化目录、不执行实验初始化 SQL。名为 backend 的 Compose 项目是 PostgreSQL，与本项目无关。
 - Redis 只用本项目专用容器 `melonhub-redis`（标签 `com.melonhub.role=cache`，`127.0.0.1:6380`）。Docker 中其他 Redis 不得使用或修改；脚本对没有该标签的同名容器拒绝操作。
 - 真实地址、数据库/SSH/Redis/管理员密码只在根目录忽略文件 `.env`，`.local/redis/redis.conf` 也含 Redis 密码。不要打印原文，不写进示例、文档、日志或命令行参数。Webhook 签名密钥和 TOTP 密钥以原文存在数据库中，同样不得打印或写入文档。
+- 已部署课程联调使用服务器当前账号。核对课程验收登录时从根目录 `.env` 读取已验证的 `COURSE_TEST_USERS_SHARED_PASSWORD`。CSV 仅供一次性导入，导入后移出工作区。
 - 中文沟通，直接推进；只读诊断和常规修复不反复询问。修改前先阅读当前文件和相关代码，尊重用户已有编辑。
 
 ## 2. 工程与目录
@@ -30,31 +26,35 @@
 | 项目 | 当前情况 |
 | --- | --- |
 | 后端 | Spring Boot 3.5.7、Spring Data JPA（Hibernate，`ddl-auto=validate`，表结构仍由 Flyway 管理）、Spring Data Redis（Lettuce）、Bean Validation、Flyway、MySQL Connector/J、Actuator + Micrometer Prometheus、spring-security-crypto |
-| Java | 源码目标 Java 17；本机最近验证实际使用 JDK 25.0.2 并以 `--release 17` 编译；当前没有可确认的 `C:\Program Files\Java\jdk-17` 安装 |
+| Java | 源码目标 Java 17。本机 JDK 25.0.2，Swarm 后端运行 JDK 21 |
 | 前端 | Vue 3.5.22、TypeScript 5.9.3、Pinia 3.0.3、Vue Router 4.5.1（hash 路由）、Vite 6.4.1、ant-design-vue 4.2.6、@ant-design/icons-vue 7、dayjs |
 | Java SDK | `sdk/java`，`com.melonhub:melonhub-client:1.0.0`，独立 Maven 工程（不在根 `pom.xml` 聚合中），基于 JDK HttpClient，Spring Boot 自动装配可选；未发布到远程仓库，需 `mvn -f sdk/java/pom.xml install` |
 | Maven | 根 `pom.xml` 聚合 `backend`，后端 `backend/pom.xml`；启动器可发现 PATH、MAVEN_HOME/M2_HOME 或 `.m2/wrapper/dists` |
 | IDEA | `C:\Program Files\JetBrains\IntelliJ IDEA 2024.2.1`；图形启动未实测 |
 | Shell | PowerShell 7；优先 rg 搜索。PowerShell 别名会遮蔽同名函数（例如 `Del`），临时脚本的函数名要避开内置别名 |
 
-后端包 `com.melonhub.rbac`，根包只保留 `RbacApplication`（启用定时任务）：
+后端包 `com.melonhub.rbac`，根包只保留 `RbacApplication`（启用定时任务）。PR #8 后入口统一依赖 `service.port` 的 10 个 `*UseCase`；启动时以 `melonhub.backend-strategy=structured|ddd` 选择 `service.structured.Structured*Service` 或 `service.ddd.application.Ddd*Service`。DDD 领域模型与端口位于 `service.ddd.domain`，适配器位于 `service.ddd.infrastructure`。下文历史简称 `RbacService`、`AuthService` 等指对应职责，并非根 service 包仍有这些旧类；结构化树规则为 `StructuredAdminHierarchyProcedures`，DDD 为 `AdminHierarchy`。类图与源码对应见 `doc/后端UML与代码导读.md`。
+
+老师课程系统的实际运行包已只读核对，当前经 `/auth/me` 获取权限；未发现 `resetCourseToApplication`、`setClassTeachers`、`listUsers` 或 `/auth/api-permissions` 调用，不因 OpenAPI 中出现 operationId 就增加映射。版本证据和静态核对限制见 `doc/课程权限接入核对.md`。
+
+职责速查：
 
 | 包 | 文件与职责 |
 | --- | --- |
 | controller | `AuthController` 健康、管理员登录、改密、两步验证和 me；`AdminController` 控制台基础配置与治理入口；`AdminRoleController` 管理员角色；`GovernanceController`（`/api/admin`）审批、复核、Webhook、清单、用户导入、权限反查、即将到期、软件限额、搜索、系统状态、审计链校验；`AccountController` 管理员账号；`IdentityController` 统一身份登录、退出、当前用户、权限与组织查询；`IdentityAdminController` 统一身份用户凭据导入；`BusinessController` 业务 API（含角色申请与只读授权查询） |
 | service | `RbacService` 配置与规则，`ContextService` 上下文与校验，`AuthService` 管理员、TOTP 与 API Key 认证，`AdminRoleService` 管理员角色，`AdminTree` 管理员层级规则，`GovernanceService` 审批/复核/导入/清单/反查，`WebhookService` 事件外盒与投递，`AuditSealService` 审计哈希链封存与校验，`ConsoleService` 搜索与状态看板，`MaintenanceService` 定时清理与分配到期 |
-| dao | `RbacDao`、`ContextDao`、`AuthDao`、`AdminRoleDao`、`GovernanceDao`、`IdentityDao`、`WebhookDao`、`AuditDao`：JPA（`entity` 实体、`repository` Spring Data 仓库、`Jpql` 条件拼装与结果行）；`Visibility` 负责可见范围，应用代码中不使用 JdbcTemplate 与原生 SQL。DAO 方法签名与返回结构（Map 的键、`java.sql.Timestamp` 时间）保持迁移前的样子，由 `ApiContractTest` 核对；写操作在方法返回前 flush，批量 JPQL 执行后清空持久化上下文；做决定的读取用 JPQL 投影；加锁读取先清空持久化上下文再带 `LockModeType` 查询，取到最新提交的行；带条件的更新（认领、口令步、密码替换等）保持原条件写成 JPQL；`created_at` 等由数据库生成（`@Generated`）；需要时间运算的阈值取应用服务器时钟，比较当前时间用 JPQL `current_timestamp` |
+| dao | `RbacDao`、`ContextDao`、`AuthDao`、`AdminRoleDao`、`GovernanceDao`、`IdentityDao`、`WebhookDao`、`AuditDao`：JPA（`entity` 实体、`repository` Spring Data 仓库、`Jpql` 条件拼装与结果行）；`Visibility` 负责可见范围，应用代码中不使用 JdbcTemplate 与原生 SQL。DAO 方法签名与返回结构（Map 的键、`java.sql.Timestamp` 时间）保持迁移前的样子，由 `R31_ApiContractIntegrationTest` 核对；写操作在方法返回前 flush，批量 JPQL 执行后清空持久化上下文；做决定的读取用 JPQL 投影；加锁读取先清空持久化上下文再带 `LockModeType` 查询，取到最新提交的行；带条件的更新（认领、口令步、密码替换等）保持原条件写成 JPQL；`created_at` 等由数据库生成（`@Generated`）；需要时间运算的阈值取应用服务器时钟，比较当前时间用 JPQL `current_timestamp` |
 | cache | `PermissionCache`：Redis 缓存、代标记失效协议、熔断与纪元恢复 |
 | dto | `Requests`：输入类型与校验 |
 | security | `ApiGuard` 统一鉴权/限流/请求编号/安全头，`GlobalRateLimiter` Redis 固定窗口跨实例限流（失败回退 `RateLimiter`），`ApplicationRateLimits` 软件限额（实例缓存 30 秒），`Totp`，`AdminAccess`/`AdminPrincipal` 管理员权限，`ApplicationCaller`，`RateLimiter`，`ClientAddress`，`Credentials` |
 | exception | `ApiException`、`ApiErrors`：结构化错误（含 requestId） |
 | config | `CloudDatabaseConfiguration`（保留历史类名）、`RedisConfiguration`、`DemoData` |
 
-迁移按当前仓库编号为：`V1__rbac.sql`、`V2__enterprise.sql`、`V3__governance.sql`、`V4__audit_seal_order.sql`、`V5__governance_history.sql`、`V6__role_owned_permissions.sql`、`V7__application_shared_permissions.sql`、`V8__legacy_domain_compatibility.sql`、`V9__admin_functions.sql`、`V10__admin_tree.sql`、`V11__identity_integration.sql`。其中 V6/V7 保留旧库兼容所需的角色与权限迁移，V8 处理旧域模型兼容，V9 管理员功能，V10 管理员树，V11 统一身份凭据与会话。已应用的迁移不得修改，结构变更使用新的版本号。
+Flyway 迁移为 V1–V16。V6、V7 保留旧版结构演进，V8 恢复部门 × 软件隔离，V9、V10 管理员功能与管理树，V11–V13 统一身份凭据与课程审计，V14 管理员数字主键，V15、V16 补齐隔离域复合外键。已应用的迁移保持原样，新增结构变更使用新版本。
 
 Controller、Service 不直接使用 EntityManager 或仓库查询，持久化留在 DAO；新代码不写原生 SQL。不新增无意义抽象。
 
-前端 `frontend/src`：`main.ts` 路由与权限守卫（`superOnly` 页面仅超级管理员；`domain` 标记的页面显示授权域选择），`App.vue` 布局（侧栏、面包屑、全局搜索、授权域选择、健康徽标、主题切换、账号菜单含两步验证与修改密码；手机上侧栏改为左侧抽屉、授权域移到顶栏下方整行、全局搜索收成图标），`store.ts` 身份与授权域，`api.ts` 请求与会话（token 在 sessionStorage），`theme.ts` 明暗主题与 antd 主题令牌（默认跟随系统，选择存 localStorage `melonhub-theme`，颜色需与 `style.css` 变量同步），`responsive.ts` 手机断点（≤768px，与 `style.css` 的媒体查询同步）：`isPhone`，以及给表格单元格写 `data-label`（列标题）和 `data-empty`（只有“—”或空）供手机卡片布局使用，“操作”列按标题识别，`composables.ts` 带请求序号的分页/列表（丢弃过时响应），`labels.ts` 中文标签，`types.ts` 类型。`pages/` 14 个页面：Overview、Departments、Users（含批量导入）、Applications（API Key/Webhook 抽屉，“更多”中限流）、Roles（“清单与复制”下拉：导出本部门清单/导出全部部门清单/导入清单/从其他部门复制）、Permissions（使用者反查）、Assignments（逐角色到期、统一有效天数、即将到期标签）、Approvals、Reviews、Simulate、Audit（校验链条）、Status、Accounts、Integration。`components/`：DomainPicker、DomainEmpty、GlobalSearch（Ctrl/⌘+K）、ThemeToggle、PageHead、EmptyState、ReadonlyHint、LoginView（MFA 口令步骤）、MfaModal、PasswordModal、KeysDrawer、WebhooksDrawer、ReviewDrawer、PermissionHoldersDrawer、UserAccessDrawer、RoleMembersDrawer、UserPicker、SecretModal。样式在 `style.css`，覆盖 antd 默认样式时要提高选择器优先级（如 `.shell .ant-layout-header.header`），深色模式需同时检查。
+前端 `frontend/src`：`main.ts` 路由与权限守卫（`superOnly` 页面仅超级管理员；`domain` 标记的页面显示授权域选择），`App.vue` 布局（侧栏、面包屑、全局搜索、授权域选择、健康徽标、主题切换、账号菜单含两步验证与修改密码；手机上侧栏改为左侧抽屉、授权域移到顶栏下方整行、全局搜索收成图标），`store.ts` 身份与授权域，`api.ts` 请求与会话（token 在 sessionStorage），`theme.ts` 明暗主题与 antd 主题令牌（默认跟随系统，选择存 localStorage `melonhub-theme`，颜色需与 `style.css` 变量同步），`responsive.ts` 手机断点（≤768px，与 `style.css` 的媒体查询同步）：`isPhone`，以及给表格单元格写 `data-label`（列标题）和 `data-empty`（只有“—”或空）供手机卡片布局使用，“操作”列按标题识别，`composables.ts` 带请求序号的分页/列表（丢弃过时响应），`labels.ts` 中文标签，`types.ts` 类型。`pages/` 15 个页面：Overview、Departments、Users（含批量导入）、Applications（API Key/Webhook 抽屉，“更多”中限流）、Roles（“清单与复制”下拉：导出本部门清单/导出全部部门清单/导入清单/从其他部门复制）、Permissions（使用者反查）、Assignments（逐角色到期、统一有效天数、即将到期标签）、Approvals、Reviews、Simulate、Audit（校验链条）、Status、Accounts、AdminRoles、Integration。`components/`：DomainPicker、DomainEmpty、GlobalSearch（Ctrl/⌘+K）、ThemeToggle、PageHead、EmptyState、ReadonlyHint、LoginView（MFA 口令步骤）、MfaModal、PasswordModal、KeysDrawer、WebhooksDrawer、ReviewDrawer、PermissionHoldersDrawer、UserAccessDrawer、RoleMembersDrawer、UserPicker、SecretModal。样式在 `style.css`，覆盖 antd 默认样式时要提高选择器优先级（如 `.shell .ant-layout-header.header`），深色模式需同时检查。
 
 对象内配置新增：`authorizationScope.ts` 提供局部授权域，默认回退全局 store；`AuthorizationDrawer` 内复用 Roles/Permissions/Assignments/Users，Users 总表异步引用该抽屉以避免模块循环初始化。`GuardedButton`/`GuardedLink` 用于需要管理功能的按钮与操作链接：无权限时置灰并以悬停提示说明缺少的功能（`hub.denial`），不要再用 `v-if` 隐藏；`PermissionEditor` 是原权限表单的共用实现；`DomainCopyModal` 逐目标调用现有复制接口；`BatchRolesModal` 逐软件调用现有批量追加接口。抽屉内切换软件保留本部门选人，切换部门清空；已有配置、有效分配与期限保留。各页面的旧 URL 仍可使用。
 
@@ -85,9 +85,9 @@ MySQL 是唯一数据源，Redis 无持久化。缓存键带随机“代标记�
 
 ### 管理员与凭据
 
-控制台权限按功能配置：16 项功能（`AdminFunction` 枚举，与 `admin_functions` 表一致），每个 `/api/admin` 处理函数用 `@RequiresFunction` 声明所属功能，由 `AdminFunctionGuard` 拦截校验，未声明的接口一律拒绝；管理员角色（`admin_roles`）是一组功能，内置 SUPER_ADMIN / ADMIN / APP_ADMIN / AUDITOR 不可修改且保持原有权限（`AdminFunctionTest` 按旧规则逐接口核对），可在控制台新建自定义角色（只能授予自己拥有的功能）。软件范围属于账号（`all_applications` + `admin_account_applications`），处理函数用 `AdminAccess.application` 校验；列表按可见软件过滤。角色的功能每次请求重新读取，修改即生效。管理员按部门分级：账号组成树（`AdminTree`：根管理全部账号，其余管理子树；下级的角色功能、部门与软件范围为上级子集；`DEPARTMENT` 部门管理员是叶子、必须限定部门、不能有账号/角色管理功能）。账号与角色的修改先锁全部账号行（`lockAccounts`），在内存中校验修改后的树，通过后才写入。部门范围经 `Visibility`（软件、部门，null 表示不限）传入列表查询，授权域接口用 `AdminAccess.domain` 同时校验部门与软件；平台级功能（`AdminFunction.platformWide`）与用户批量导入要求全部部门。`.env` 的 ADMIN_* 只在账号不存在时创建初始超级管理员；`ADMIN_PASSWORD_RESET=true` 重启一次可恢复，之后改回 false。5 次失败（密码或动态口令）锁 15 分钟，会话 8 小时、空闲 30 分钟；保留至少一个启用的超级管理员。
+控制台权限按功能配置：19 项功能（`AdminFunction` 枚举，与 `admin_functions` 表一致），每个 `/api/admin` 处理函数用 `@RequiresFunction` 声明所属功能，由 `AdminFunctionGuard` 拦截校验，未声明的接口一律拒绝；管理员角色（`admin_roles`）是一组功能，内置 SUPER_ADMIN / ADMIN / APP_ADMIN / DEPARTMENT_ADMIN / AUDITOR 不可修改且保持原有权限（`R18_AdminFunctionGuardIntegrationTest` 核对功能声明），可在控制台新建自定义角色（只能授予自己拥有的功能）。软件范围属于账号（`all_applications` + `admin_account_applications`），处理函数用 `AdminAccess.application` 校验；列表按可见软件过滤。角色的功能每次请求重新读取，修改即生效。管理员按部门分级：账号组成树（`AdminTree`：根管理全部账号，其余管理子树；下级的角色功能、部门与软件范围为上级子集；`DEPARTMENT` 部门管理员是叶子、必须限定部门、不能有账号/角色管理功能）。账号与角色的修改先锁全部账号行（`lockAccounts`），在内存中校验修改后的树，通过后才写入。部门范围经 `Visibility`（软件、部门，null 表示不限）传入列表查询，授权域接口用 `AdminAccess.domain` 同时校验部门与软件；平台级功能（`AdminFunction.platformWide`）与用户批量导入要求全部部门。`.env` 的 ADMIN_* 只在账号不存在时创建初始超级管理员；`ADMIN_PASSWORD_RESET=true` 重启一次可恢复，之后改回 false。5 次失败（密码或动态口令）锁 15 分钟，会话 8 小时、空闲 30 分钟；保留至少一个启用的超级管理员。
 
-两步验证：`Totp` RFC 6238（SHA1、30 秒、6 位，容忍 ±1 步）；setup 生成待绑定密钥，confirm 后生效；登录记录 `mfa_last_step`，同一步不能复用（停用两步验证同样检查）；错误码 `MFA_REQUIRED`/`MFA_INVALID`；停用需密码 + 口令；超级管理员 `POST /api/admin/accounts/{username}/mfa/reset`。
+两步验证：`Totp` RFC 6238（SHA1、30 秒、6 位，容忍 ±1 步）；setup 生成待绑定密钥，confirm 后生效；登录记录 `mfa_last_step`，同一步不能复用（停用两步验证同样检查）；错误码 `MFA_REQUIRED`/`MFA_INVALID`；停用需密码 + 口令；超级管理员 `POST /api/admin/accounts/{id}/mfa/reset`。
 
 上下文 1 小时；API Key、上下文 token、会话 token 只存 SHA-256；管理员密码 BCrypt cost 12，12–100 个字符且 UTF-8 不超过 72 字节（超出拒绝，不截断；`.env` 初始密码超出则拒绝启动）。会话绑定 `credential_version`：改密、重置、改角色、停用、两步验证变更都递增版本；登录用条件插入创建会话，要求账号仍启用且版本、密码哈希、TOTP 密钥与校验时一致，否则 401 `BAD_CREDENTIALS`，因此并发改动或删除后同名重建都不会留下可用会话。账号名可含 `@`、`.`，不能以点开头。每软件最多 10 个有效 API Key（`application_keys`），可设有效期、单独吊销；`rotate-key` 是紧急轮换，吊销全部旧密钥。API Key 不下发浏览器；业务后端先认证用户再提交可信 externalId；平台不撤回已执行的外部业务操作。
 
@@ -98,6 +98,8 @@ Webhook：头 `MelonHub-Event`、`MelonHub-Delivery`、`MelonHub-Signature: t=<�
 `ApiGuard` 默认拒绝，只有 `/api/health`、`/api/auth/login` 公开；路径必须匹配规范形式，否则 400 INVALID_PATH（防 `;`、`%` 编码绕过）。不要放宽该正则。登录限流每来源地址每分钟 10 次，业务 API 按软件每秒限额，均经 `GlobalRateLimiter`。
 
 ## 4. 配置与启停
+
+服务器验收直接访问 Swarm 前端 `5174`。`deploy/stack.yml` 与服务器部署目录私有 `.env` 管理镜像和运行配置，变更后重新生成 `stack-resolved.yml`。只发布前端时更新 `melonhub_melonhub-frontend`。Nginx 需要转发对外的主机和端口。发布后经 `5174` 验证带浏览器同源 `Origin` 的登录与 `/api/health`，并按 `X-Request-Id` 检查后端日志。详见 `deploy/README.md`。
 
 `application.yml` 从根目录或 backend 上一级加载 `.env`，缺省 profile 为 cloud；当前根目录 `.env` 使用 `SPRING_PROFILES_ACTIVE=cloud` 和 `CLOUD_DB_NAME=melonhub_rbac`。本机开发 profile 使用 `LOCAL_DB_*`，测试必须指向专用 `melonhub_rbac_test`。Redis：`CACHE_ENABLED`、`REDIS_HOST/PORT/PASSWORD/DATABASE/CONTAINER`。可选调优：`APP_RATE_LIMIT`（默认 1000，0 不限）、`GLOBAL_RATE_LIMIT`（默认 true）、`WEBHOOK_DELIVERY_ENABLED`（默认 true）、`WEBHOOK_RETENTION_DAYS`（默认 30）、`DB_POOL_SIZE`（20）、`AUDIT_RETENTION_DAYS`（180）、`ADMIN_IDLE_MINUTES`（30）、`MANAGEMENT_PORT`（8081）、`HTTP_MAX_THREADS`（200）。仅在 `application.yml` 中固定、没有环境变量的项：`melonhub.webhooks.timeout-millis`（5000）、`melonhub.webhooks.max-attempts`（8）、`melonhub.webhooks.concurrency`（4）、`melonhub.rate-limit.login-per-minute`（10）、`melonhub.maintenance.enabled`（true，同时控制定时清理和审计封存）；TOTP issuer 固定为 `MelonHub`（代码中）。`.env` 中不要留 `KEY=` 空值，Spring 会当作空字符串。
 
@@ -120,40 +122,10 @@ Webhook：头 `MelonHub-Event`、`MelonHub-Delivery`、`MelonHub-Signature: t=<�
 
 ## 5. 验证证据与当前状态
 
-2026-11-22 当前工作区复核：
-
-- 针对性后端测试 32 项通过，前端会话竞态测试 1 项通过；前端类型检查与构建通过。
-- 当前完整 Maven 报告不能标记为全量通过：报告包含 139 项测试，其中 9 项失败、2 项错误、1 项跳过。失败线索涉及测试库 V11 校验和不一致、数据库时区、授权上下文与会话/分配到期语义；全量回归应先修复或明确隔离这些问题。
-- 2026-10-19 的后端 121 项、SDK 35 项和浏览器全量验收是历史验证结果，仍可作为证据参考，但不能写成 2026-11-22 当前运行结果。
-- `Course1` 的现场截图显示课程系统前后端和 MelonHub 前后端四个 Swarm 服务均为 `1/1`。这证明截图时服务副本已部署，不替代课程账号登录、权限差异和菜单日志的现场演示。
-- Apifox 项目 `8983436` 的 `reference/identity-openapi.json` 已保存并刷新回读，规范包含 9 个接口，用户模型中的 `no` 字段仍存在。
-
-以下内容按日期保留历史验证记录。
-
-历史手机复验（2026-10-19）：实际 375×812 走通创建部门/软件/角色/权限/成员、两类复制、跨页跨软件追加、个别调整、部分失败后继续、审批与复核关闭、全局搜索、诊断、导出和审计链校验。四类管理员入口符合权限范围；接口回读确认分配、期限、回收与首次上下文语义。14 页手机明暗无横向溢出，320×640 日期/时间及范围选择可用，1280×720 日期布局保持原样。前端 1 项测试、最终类型检查与构建通过；仅 4 个前端文件及文档改动，未重跑后端/SDK。临时数据已清理，原有 2 部门、2 软件、1 用户、1 管理员保留，审计和治理历史保留。未做实体手机、触屏手势与软键盘验收。见 `doc/验证记录.md` 第 1.0.2 节。
-
-此前对象内配置流程：前端 1 项会话竞态测试、类型检查、构建通过；浏览器走通新建部门/软件/角色/权限/成员、两类批量复制、跨页跨软件授权与个别调整、部分失败后继续、添加已有用户、全局搜索及四类管理员入口。接口回读验证期限及既有配置保留、权限实际允许/拒绝。桌面明暗正常；当时尺寸设置未生效，手机未计为复验通过（现已由上段补验）。临时验收数据已清理。仅前端改动，当时未重跑下述后端 121 项和 SDK 35 项，详情见 `doc/验证记录.md` 第 1.0.1 节。
-
-历史全量审查后补修（2026-10-19）：后端 `mvn package` **121 项**（Rbac 29、Security 26、Governance 32、Concurrency 3、PermissionCache 5、PermissionCacheOutage 2、GlobalRateLimiter 1、DatabaseTargetGuard 11、CloudTestDatabaseGuard 9、ConsoleService 2、WebhookService 1），SDK **35 项**，均 0 失败/错误/跳过；前端会话竞态用例 1 项、类型检查与构建通过。浏览器实测跨页选人→多角色追加→个别调整、期限不变、过期表单拒绝保存、五种普通列表导出、软件状态筛选、具体事件 Webhook 编辑，以及批量弹窗明暗/手机布局；详情见验证记录第 1.0 节。
-
-历史环境记录（2026-10-19）：Docker Desktop 默认管理管道和 Windows 的 Redis 6380 转发不响应，容器内 Redis 正常。本机 Linux 引擎管道仍可用，检查/重启仅限带项目标签的 `melonhub-redis`。最终缓存测试通过 `.local/minfix-redis-bridge.py` 临时通道连接同一容器完成，测试使用 DB 1 和测试前缀，验证结束停止该通道。`.env`、产品 Redis 配置未改，正常入口仍可能 `cache=DOWN` 并回退 MySQL。不要把 121 项通过解释为 Docker 转发已恢复；不要为此擅自重启共享 Docker Desktop。临时 UI 验收数据已按 ID 清理，审计保留。
-
-以下为本日较早三批复审的验证记录，数量不代表最新版本：
-
-- `./scripts/test-backend.ps1`：**112 项**（RbacIntegration 29、SecurityIntegration 24、GovernanceIntegration 27、ConcurrencyIntegration 3、ConsoleServiceTest 2、PermissionCacheIntegration 4、PermissionCacheOutage 2、GlobalRateLimiter 1、DatabaseTargetGuard 11、CloudTestDatabaseGuard 9），0 失败/错误/跳过。`ConcurrencyIntegrationTest` 用真实并发线程验证动态口令不能被并发登录共用、角色成员替换不与用户侧修改死锁、慢 Webhook 接收方不占用调度线程。
-- Java SDK `sdk/java`：`mvn test` 30 项通过。
-- 前端 `vue-tsc -b` 与 `vite build` 通过（antd 独立 chunk 约 1.13MB）。
-- 本机重启后 Docker Desktop 不会自动运行：先启动 Docker Desktop，再跑测试或 `start-all.ps1`（Redis 容器由脚本拉起）。
-- 真实栈（`start-all.ps1 -NoBrowser -Rebuild`，V4/V5 自动应用）：端到端 38/38（工具 `.local/v3-tools/v3-e2e.mjs`）；补充 6/6（`p5-check.mjs`：系统状态固定字段、删除后同名重建账号的旧会话与旧密码失效、角色成员替换）。脚本都要登录，登录限流每分钟 10 次，连续运行之间等约 60 秒；结束后 `cleanup.mjs` 清理。
-- 浏览器（`shots.mjs`，参数为页面列表与模式 `light,dark,mobile,w820`，输出目录取 `SHOTS_OUT`）：14 页 × 1440 浅色/深色/375 手机无横向溢出；修正系统状态页 Descriptions 列宽警告后复查无控制台错误。`drawer-check.mjs` 只读检查角色成员抽屉打开、加载、重新打开。截图 `output/ui/r1019/`、`r1019-fix/`。
-- 清理后剩余用户、部门、软件各为用户自己原有的“1”，管理员账号只有 admin（MFA 停用）。
-- 2026-10-18（V3）另验证过且本轮未重做：角色到期任务约 30 秒内删除分配并写审计与 `user.roles.expired`；双实例（8080 + 临时 18080/18081，关闭维护任务）经 Redis 共享登录限流，交替请求 10×401 后 2×429；删除冲突提示（409 + 具体剩余数量）；手机适配检查（375×812 触屏模拟、820/1024/1280 宽，工具 `mobile-audit.mjs`，截图 `output/ui/mobile-*`、`w820`）。
-- 未验证：IDEA 图形运行按钮；云端生产容量；数据库不可用时的系统状态页只由单元测试覆盖（共享 MySQL 不能停）；未重新压测，也未重新做 Redis 宕机演练和双实例缓存一致性（企业化改造轮结果：限流关闭单实例约 3584 次/秒、Redis 停止时 64 并发约 661 次/秒全部成功、双实例 200 次校验 0 次旧结果、宕机演练 11/11，见 `doc/验证记录.md` 第 9 节）。本轮已通过只读方式核对云端数据库和 Course1 的 Swarm 服务列表，不能替代生产容量验证。
-验证工具在忽略目录 `.local/`（`e2e.ps1`、`cross.ps1`、`drill.ps1`、`probe.ps1`、`load.mjs` 等），会读取 `.env` 但不打印凭据，不是产品模块。`cross.ps1`/`drill.ps1` 依赖 e2e 生成的临时状态文件，复用前先重新运行 e2e，结束后清理。另起实例的方式：`--server.port=18080 --management.server.port=18081 --melonhub.maintenance.enabled=false`，压测关闭限流再加 `--melonhub.rate-limit.application-per-second=0`；注意全局限流下两个实例共享 Redis 计数，用完停止。
-
-浏览器检查不要用会同步 Windows 账号的默认 Edge 配置；使用 `--inprivate --disable-extensions --disable-sync --user-data-dir=<.local 下临时目录>`，结束后删除该目录。
-
-云端记录：Swarm 管理节点为 Course1，课程系统和 MelonHub 的前后端服务在现场截图中均为 `1/1`；共享 MySQL 服务为 `lab_mysql`。云端数据库查询只允许通过 `.local/cloud-tools/` 和 `scripts/cloud-database.py verify` 等只读工具执行。root 密码统一改密已完成，不要重复改密或重试历史密码。参考 PDF 不是执行授权，不得再次 swarm init、stack deploy、初始化 SQL 或重置账号。
+- 当前与历史验证以 `doc/验证记录.md` 为准。四个验收前后端的 Swarm 副本均为 `1/1`，2026-11-24 已通过 `5174` 验证 MelonHub 登录、当前会话及三个菜单请求的后端日志，并经 `18090` 验证课程教师和学生登录及权限查询。
+- Redis 相关集成测试使用专用缓存环境。R31 本机曾遇到系统状态接口事务超时，此前的 Maven 报告不作为当前全绿证据。
+- 历史验证工具、截图、旧部署配置和导入输入归档在工作区外。`.local` 用于当前开发工具和本次运行产物。环境准则与发布入口以仓库说明及服务器当前部署配置为准。
+- 云端数据库查询只用已审核的只读工具。共享 MySQL 的账号、数据、容器和 Swarm 拓扑由其维护流程管理。
 
 ## 6. 差距分析与后续路线
 
@@ -161,12 +133,12 @@ Webhook：头 `MelonHub-Event`、`MelonHub-Delivery`、`MelonHub-Signature: t=<�
 
 仍未做（按建议优先级）：
 
-1. 高可用部署：Redis 主从 + 哨兵、HTTPS 反向代理与容器化部署清单、CI 流水线（含 Playwright 端到端用例）。
+1. 高可用部署：Redis 主从 + 哨兵、HTTPS 反向代理与CI 流水线（含 Playwright 端到端用例）。
 2. 业务侧 SDK：Node、Go 版本（Java 已完成）。
 3. 审计外部存证：导出到 SIEM/WORM 存储（当前哈希链与数据同库）。
 4. 用户同步：HR/SCIM 自动同步（当前为手工批量导入）。
 5. 授权治理深化：审批人路由（角色负责人/多级审批，当前任何有该软件写权限的管理员都可审批）、按周期自动发起复核、审批/复核待办的邮件或 IM 提醒、清单导入前差异预览（dry-run）、授权配置版本与回滚。
-6. 管理面：按部门委派的管理员范围（当前软件管理员只按软件划分）、可脚本化的管理 API 令牌、管理员会话列表与下线、密码有效期/历史策略、控制台来源 IP 白名单。
+6. 管理面：可脚本化的管理 API 令牌、管理员会话列表与下线、密码有效期/历史策略、控制台来源 IP 白名单。
 7. 小改进：Webhook 目标地址白名单、Webhook/TOTP 密钥加密存储、TOTP issuer 可配置；Grafana 面板与告警规则样例。
 8. 控制台：国际化、按需拆分 antd 体积。企业 SSO 明确不在范围内；职责分离不在 RBAC0 范围内。
 
@@ -176,6 +148,6 @@ Webhook：头 `MelonHub-Event`、`MelonHub-Delivery`、`MelonHub-Signature: t=<�
 - 缓存要求单节点 Redis。限流默认经 Redis 跨实例共享（1 秒固定窗口，窗口边界可能出现短时双倍）；Redis 不可用、`CACHE_ENABLED=false` 或 `GLOBAL_RATE_LIMIT=false` 时退回按实例令牌桶。多实例时定时任务在每个实例运行（删除幂等，审计封存靠行锁，Webhook 投递靠条件认领）。
 - `user.roles.expired` 由每分钟一次的任务发出，最多晚约 1 分钟；校验结果在到期时刻即生效。
 - 压测数字来自上一轮 Docker Desktop 单机，不是生产容量承诺；本轮未重测。
-- 未验证 IDEA 图形运行按钮、productdemojpa 业务 HTTP。当前是本机开发入口，不是公开部署的生产站点。
+- IDEA 图形运行按钮尚未实测。验收入口和最新部署记录见 `deploy/README.md` 与 `doc/验证记录.md`。
 - `.env` 按 Java properties 与 PowerShell KEY=value 读取，特殊字符和引号需验证双方一致，不得盲目给密码加引号。
 - 默认忽略 .env/.env.*（仅放行 .env.example）、.local、output、target、dist、node_modules、日志。不得把真实配置复制到其他共享文件。

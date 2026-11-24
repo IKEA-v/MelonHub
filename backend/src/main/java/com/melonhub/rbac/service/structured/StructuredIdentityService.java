@@ -253,6 +253,7 @@ public class StructuredIdentityService implements IdentityUseCase {
     public Map<String, Object> checkPermission(String authorization, String permission) {
         IdentityDao.UserRow user = authenticatedUser(authorization);
         Map<String, Object> response = new LinkedHashMap<>();
+        response.put("permission", permission);
         response.put("allowed", identityDao.permissions(user.id(), COURSE_SYSTEM).contains(permission));
         return response;
     }

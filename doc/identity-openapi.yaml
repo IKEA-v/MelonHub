@@ -85,6 +85,7 @@ paths:
       operationId: checkUiPermission
       tags: [统一身份与权限]
       summary: 校验前端权限
+      description: 仅返回本次请求的权限码与允许结果，不返回用户资料、角色或完整权限列表。
       parameters:
         - { name: permission, in: path, required: true, schema: { type: string, minLength: 1 } }
       responses:
@@ -539,8 +540,11 @@ components:
         "no": { type: string }
     Allowed:
       type: object
-      required: [allowed]
-      properties: { allowed: { type: boolean } }
+      additionalProperties: false
+      required: [permission, allowed]
+      properties:
+        permission: { type: string, description: 本次请求校验的权限码, example: TV }
+        allowed: { type: boolean }
     ApiAllowed:
       type: object
       required: [operationId, allowed]

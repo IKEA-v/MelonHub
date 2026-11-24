@@ -155,6 +155,7 @@ public class DddIdentityService implements IdentityUseCase {
             var aggregate = new IdentityAccountAggregate(user, List.of(),
                     repository.permissions(user.id(), CoursePermissionCatalog.COURSE_SYSTEM));
             var response = new LinkedHashMap<String, Object>();
+            response.put("permission", permission);
             response.put("allowed", aggregate.hasUiPermission(permission));
             return response;
         });
